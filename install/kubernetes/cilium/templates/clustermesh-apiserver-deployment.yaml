@@ -7,7 +7,9 @@ metadata:
     k8s-app: clustermesh-apiserver
   namespace: {{ .Release.Namespace }}
 spec:
+{{- if .Values.clustermesh.apiserver.replicas }}
   replicas: {{ .Values.clustermesh.apiserver.replicas }}
+{{- end }}
   selector:
     matchLabels:
       k8s-app: clustermesh-apiserver

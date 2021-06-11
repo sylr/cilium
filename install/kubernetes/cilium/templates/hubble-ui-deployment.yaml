@@ -7,7 +7,9 @@ metadata:
     k8s-app: hubble-ui
   name: hubble-ui
 spec:
+{{- if .Values.hubble.ui.replicas }}
   replicas: {{ .Values.hubble.ui.replicas }}
+{{- end }}
   selector:
     matchLabels:
       k8s-app: hubble-ui

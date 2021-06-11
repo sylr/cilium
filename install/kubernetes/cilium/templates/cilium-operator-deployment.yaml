@@ -30,7 +30,9 @@ metadata:
 spec:
   # See docs on ServerCapabilities.LeasesResourceLock in file pkg/k8s/version/version.go
   # for more details.
+{{- if .Values.operator.replicas }}
   replicas: {{ .Values.operator.replicas }}
+{{- end }}
   selector:
     matchLabels:
       io.cilium/app: operator

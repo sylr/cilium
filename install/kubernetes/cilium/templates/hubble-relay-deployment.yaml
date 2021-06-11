@@ -7,8 +7,9 @@ metadata:
     k8s-app: hubble-relay
   namespace: {{ .Release.Namespace }}
 spec:
-
+{{- .Values.hubble.relay.replicas }}
   replicas: {{ .Values.hubble.relay.replicas }}
+{{- end }}
   selector:
     matchLabels:
       k8s-app: hubble-relay
