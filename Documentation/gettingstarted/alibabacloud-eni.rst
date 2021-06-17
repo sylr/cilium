@@ -98,7 +98,7 @@ These keys need to have certain `RAM Permissions
         {
           "Action": [
             "vpc:DescribeVSwitches",
-            "vpc:ListTagResources",
+            "vpc:ListTagResources"
           ],
           "Resource": [
             "*"
@@ -165,8 +165,8 @@ Deploy Cilium release via Helm:
    the security groups for pod ENIs are derived from the primary ENI
    (``eth0``).
 
-
 .. include:: k8s-install-validate.rst
+
 .. include:: next-steps.rst
 
 .. _alibabacloud_eni_limitations:

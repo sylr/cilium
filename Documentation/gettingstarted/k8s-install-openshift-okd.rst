@@ -73,7 +73,7 @@ And set ``networkType: Cilium``:
 
 The resulting configuration will look like this:
 
-.. code:: yaml
+.. code-block:: yaml
 
    apiVersion: v1
    baseDomain: ilya-openshift-test-1.cilium.rocks
@@ -196,8 +196,7 @@ Create the cluster:
    INFO Login to the console with user: "kubeadmin", and password: "<REDACTED>"
    INFO Time elapsed: 32m9s
 
-Next, the firewall configuration must be updated to allow `Cilium ports
-<https://docs.cilium.io/en/v1.8/install/system_requirements/#firewall-rules>`_.
+Next, the firewall configuration must be updated to allow Cilium ports :ref:`firewall_requirements`.
 ``openshift-install`` does not support custom firewall rules, so you will need to
 use one of the following scripts if you are using AWS or GCP. Azure does not
 need additional configuration.
@@ -306,16 +305,13 @@ it sets only ``allowHostPorts`` and ``allowHostNetwork`` without any other privi
    groups: null
    EOF
 
-.. include:: k8s-install-connectivity-test.rst
+Deploy the connectivity test
+----------------------------
+
+.. include:: kubectl-connectivity-test.rst
 
 Cleanup after connectivity test
 -------------------------------
-
-Remove the ``cilium-test`` namespace:
-
-.. code-block:: shell-session
-
-   kubectl delete ns cilium-test
 
 Remove the ``SecurityContextConstraints``:
 

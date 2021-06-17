@@ -172,6 +172,10 @@ data:
   enable-metrics: "true"
 {{- end }}
 
+{{- if .Values.operator.skipCRDCreation }}
+  skip-crd-creation: "true"
+{{- end }}
+
   # Enable IPv4 addressing. If enabled, all endpoints are allocated an IPv4
   # address.
   enable-ipv4: {{ .Values.ipv4.enabled | quote }}
@@ -344,8 +348,6 @@ data:
   auto-create-cilium-node-resource: "true"
 {{- if .Values.eni.updateEC2AdapterLimitViaAPI }}
   update-ec2-adapter-limit-via-api: "true"
-  # The below value is deprecated and will be removed in a future release, see https://github.com/cilium/cilium/issues/12396
-  update-ec2-apdater-limit-via-api: "true"
 {{- end }}
 {{- if .Values.eni.awsReleaseExcessIPs }}
   aws-release-excess-ips: "true"
@@ -522,22 +524,29 @@ data:
 {{- if hasKey .Values.nodePort "directRoutingDevice" }}
   direct-routing-device: {{ .Values.nodePort.directRoutingDevice | quote }}
 {{- end }}
-{{- if .Values.nodePort.enableHealthCheck }}
+{{- if hasKey .Values.nodePort "enableHealthCheck" }}
   enable-health-check-nodeport: {{ .Values.nodePort.enableHealthCheck | quote}}
 {{- end }}
   node-port-bind-protection: {{ .Values.nodePort.bindProtection | quote }}
   enable-auto-protect-node-port-range: {{ .Values.nodePort.autoProtectPortRange | quote }}
 {{- end }}
 {{- if hasKey .Values "loadBalancer" }}
+{{- if .Values.loadBalancer.standalone }}
+  datapath-mode: lb-only
+{{- end }}
 {{- if hasKey .Values.loadBalancer "mode" }}
-  node-port-mode: {{ .Values.loadBalancer.mode | quote }}
+  bpf-lb-mode: {{ .Values.loadBalancer.mode | quote }}
 {{- end }}
 {{- if hasKey .Values.loadBalancer "algorithm" }}
   bpf-lb-algorithm: {{ .Values.loadBalancer.algorithm | quote }}
 {{- end }}
 {{- if hasKey .Values.loadBalancer "acceleration" }}
-  node-port-acceleration: {{ .Values.loadBalancer.acceleration | quote }}
+  bpf-lb-acceleration: {{ .Values.loadBalancer.acceleration | quote }}
 {{- end }}
+{{- if hasKey .Values.loadBalancer "dsrDispatch" }}
+  bpf-lb-dsr-dispatch: {{ .Values.loadBalancer.dsrDispatch | quote }}
+{{- end }}
+
 {{- end }}
 {{- if hasKey .Values.maglev "tableSize" }}
   bpf-lb-maglev-table-size: {{ .Values.maglev.tableSize | quote}}
@@ -596,7 +605,7 @@ data:
 {{- if hasKey .Values "healthChecking" }}
   enable-health-checking: {{ .Values.healthChecking | quote }}
 {{- end }}
-{{- if .Values.etcd.managed }}
+{{- if or .Values.wellKnownIdentities.enabled .Values.etcd.managed }}
   enable-well-known-identities: "true"
 {{- else }}
   enable-well-known-identities: "false"

@@ -433,7 +433,7 @@ func handleNativeDevices(strict bool) {
 		option.Config.DirectRoutingDevice == ""
 	if detectNodePortDevs || detectDirectRoutingDev {
 		if err := detectDevices(detectNodePortDevs, detectDirectRoutingDev); err != nil {
-			msg := "Unable to detect devices for BPF NodePort."
+			msg := "Unable to detect devices to attach Loadbalancer, Host Firewall or Bandwidth Manager program"
 			if strict {
 				log.WithError(err).Fatal(msg)
 			} else {
@@ -448,7 +448,7 @@ func handleNativeDevices(strict bool) {
 			if detectDirectRoutingDev {
 				l = l.WithField(logfields.DirectRoutingDevice, option.Config.DirectRoutingDevice)
 			}
-			l.Info("Using auto-derived devices for BPF node port")
+			l.Info("Using auto-derived devices to attach Loadbalancer, Host Firewall or Bandwidth Manager program")
 		}
 	} else if option.Config.EnableNodePort { // both --devices and --direct-routing-device are specified by user
 		// Check whether the DirectRoutingDevice (if specified) is
@@ -631,7 +631,18 @@ func detectDevices(detectNodePortDevs, detectDirectRoutingDev bool) error {
 			"Cannot retrieve host IP addrs for BPF NodePort device detection")
 	} else {
 		for _, a := range addrs {
-			ifidxByAddr[a.IP.String()] = a.LinkIndex
+			// Any cilium_* interface will never be a valid NodePort or Direct Routing
+			// interface. Skip interface if we cannot resolve it from Netlink via its
+			// ifIndex or if its name begins with cilium_.
+			if link, err := netlink.LinkByIndex(a.LinkIndex); err != nil {
+				log.WithError(err).WithField(logfields.LinkIndex, a.LinkIndex).Warn(
+					"Unable to resolve link from ifIndex, skipping interface for device detection")
+			} else if strings.HasPrefix(link.Attrs().Name, "cilium_") {
+				log.WithField(logfields.Device, link.Attrs().Name).Debug(
+					"Skipping Cilium-generated interface for device detection")
+			} else {
+				ifidxByAddr[a.IP.String()] = a.LinkIndex
+			}
 		}
 	}
 

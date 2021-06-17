@@ -83,7 +83,7 @@ cilium-agent [flags]
       --enable-external-ips                                  Enable k8s service externalIPs feature (requires enabling enable-node-port) (default true)
       --enable-health-check-nodeport                         Enables a healthcheck nodePort server for NodePort services with 'healthCheckNodePort' being set (default true)
       --enable-health-checking                               Enable connectivity health checking (default true)
-      --enable-host-firewall                                 Enable host network policies
+      --enable-host-firewall                                 Enable host network policies (beta when using kube-proxy)
       --enable-host-legacy-routing                           Enable the legacy host forwarding model which does not bypass upper stack in host namespace
       --enable-host-port                                     Enable k8s hostPort mapping feature (requires enabling enable-node-port) (default true)
       --enable-host-reachable-services                       Enable reachability of services for host applications
@@ -220,7 +220,6 @@ cilium-agent [flags]
       --restore                                              Restores state, if possible, from previous daemon (default true)
       --sidecar-istio-proxy-image string                     Regular expression matching compatible Istio sidecar istio-proxy container image names (default "cilium/istio_proxy")
       --single-cluster-route                                 Use a single cluster route instead of per node routes
-      --skip-crd-creation                                    Skip Kubernetes Custom Resource Definitions creations
       --socket-path string                                   Sets daemon's socket path to listen for connections (default "/var/run/cilium/cilium.sock")
       --sockops-enable                                       Enable sockops when kernel supported
       --state-dir string                                     Directory path to store runtime state (default "/var/run/cilium")

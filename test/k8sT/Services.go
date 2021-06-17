@@ -710,8 +710,8 @@ var _ = SkipDescribeIf(helpers.RunsOn54Kernel, "K8sServicesTest", func() {
 			}
 
 			var wg sync.WaitGroup
-			wg.Add(len(testCases))
 			for _, testCase := range testCases {
+				wg.Add(1)
 				go func(tc lrpTestCase) {
 					defer GinkgoRecover()
 					defer wg.Done()
@@ -769,25 +769,27 @@ var _ = SkipDescribeIf(helpers.RunsOn54Kernel, "K8sServicesTest", func() {
 			}
 
 			var wg sync.WaitGroup
-			wg.Add(len(testCases) * 2)
-			for _, testCase := range testCases {
-				for _, name := range []string{be1Name, be2Name} {
-					go func(tc lrpTestCase, want string) {
+			for _, tc := range testCases {
+				pods, err := kubectl.GetPodNames(helpers.DefaultNamespace, tc.selector)
+				Expect(err).Should(BeNil(), "cannot retrieve pod names by filter %q", tc.selector)
+				Expect(len(pods)).Should(BeNumerically(">", 0), "no pod exists by filter %q", tc.selector)
+				for _, pod := range pods {
+					wg.Add(1)
+					go func(tc lrpTestCase, pod string) {
 						defer GinkgoRecover()
 						defer wg.Done()
+						want := []string{be1Name, be2Name}
+						be1Found := false
+						be2Found := false
 						Eventually(func() bool {
-							pods, err := kubectl.GetPodNames(helpers.DefaultNamespace, tc.selector)
-							Expect(err).Should(BeNil(), "cannot retrieve pod names by filter %q", tc.selector)
-							Expect(len(pods)).Should(BeNumerically(">", 0), "no pod exists by filter %q", tc.selector)
-							ret := true
-							for _, pod := range pods {
-								res := kubectl.ExecPodCmd(helpers.DefaultNamespace, pod, tc.cmd)
-								Expect(err).To(BeNil(), "%s failed in %s pod", tc.cmd, pod)
-								ret = ret && strings.Contains(res.Stdout(), want)
-							}
-							return ret
+							res := kubectl.ExecPodCmd(helpers.DefaultNamespace, pod, tc.cmd)
+							ExpectWithOffset(1, res).Should(helpers.CMDSuccess(),
+								"%s failed in %s pod", tc.cmd, pod)
+							be1Found = be1Found || strings.Contains(res.Stdout(), want[0])
+							be2Found = be2Found || strings.Contains(res.Stdout(), want[1])
+							return be1Found && be2Found
 						}, 30*time.Second, 1*time.Second).Should(BeTrue(), "assertion fails for test case: %v", tc)
-					}(testCase, name)
+					}(tc, pod)
 				}
 			}
 			wg.Wait()
@@ -2509,6 +2511,9 @@ Secondary Interface %s :: IPv4: (%s, %s), IPv6: (%s, %s)`, helpers.DualStackSupp
 							bgpConfigMap string
 
 							lbSVC string
+
+							ciliumPodK8s1, ciliumPodK8s2 string
+							testStartTime                time.Time
 						)
 
 						applyFRRTemplate := func() string {
@@ -2579,13 +2584,47 @@ Secondary Interface %s :: IPv4: (%s, %s), IPv6: (%s, %s)`, helpers.DualStackSupp
 								map[string]string{
 									"bgp.enabled":                 "true",
 									"bgp.announce.loadbalancerIP": "true",
+
+									"debug.verbose": "datapath", // https://github.com/cilium/cilium/issues/16399
 								})
 
 							lbSVC = helpers.ManifestGet(kubectl.BasePath(), "test_lb_with_ip.yaml")
 							kubectl.ApplyDefault(lbSVC).ExpectSuccess("Unable to apply %s", lbSVC)
+
+							var err error
+							ciliumPodK8s1, err = kubectl.GetCiliumPodOnNode(helpers.K8s1)
+							ExpectWithOffset(1, err).ShouldNot(HaveOccurred(), "Cannot determine cilium pod name")
+							ciliumPodK8s2, err = kubectl.GetCiliumPodOnNode(helpers.K8s2)
+							ExpectWithOffset(1, err).ShouldNot(HaveOccurred(), "Cannot determine cilium pod name")
+							testStartTime = time.Now()
 						})
 
 						AfterAll(func() {
+							res := kubectl.CiliumExecContext(
+								context.TODO(),
+								ciliumPodK8s1,
+								fmt.Sprintf(
+									"hubble observe debug-events --since %v -o json",
+									testStartTime.Format(time.RFC3339),
+								),
+							)
+							helpers.WriteToReportFile(
+								res.CombineOutput().Bytes(),
+								"tests-loadbalancer-hubble-observe-debug-events-k8s1.log",
+							)
+							res = kubectl.CiliumExecContext(
+								context.TODO(),
+								ciliumPodK8s2,
+								fmt.Sprintf(
+									"hubble observe debug-events --since %v -o json",
+									testStartTime.Format(time.RFC3339),
+								),
+							)
+							helpers.WriteToReportFile(
+								res.CombineOutput().Bytes(),
+								"tests-loadbalancer-hubble-observe-debug-events-k8s2.log",
+							)
+
 							kubectl.Delete(frr)
 							kubectl.Delete(bgpConfigMap)
 							kubectl.Delete(lbSVC)
@@ -2888,7 +2927,8 @@ Secondary Interface %s :: IPv4: (%s, %s), IPv6: (%s, %s)`, helpers.DualStackSupp
 		// Run on net-next and 4.19 but not on old versions, because of
 		// LRU requirement.
 		SkipItIf(func() bool {
-			return helpers.DoesNotRunOn419OrLaterKernel()
+			return helpers.DoesNotRunOn419OrLaterKernel() ||
+				(helpers.SkipQuarantined() && helpers.RunsOnGKE())
 		}, "Supports IPv4 fragments", func() {
 			options := map[string]string{}
 			// On GKE we need to disable endpoint routes as fragment tracking

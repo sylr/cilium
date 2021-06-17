@@ -631,7 +631,7 @@ func init() {
 	flags.Bool(option.EnableIdentityMark, true, "Enable setting identity mark for local traffic")
 	option.BindEnv(option.EnableIdentityMark)
 
-	flags.Bool(option.EnableHostFirewall, false, "Enable host network policies")
+	flags.Bool(option.EnableHostFirewall, false, "Enable host network policies (beta when using kube-proxy)")
 	option.BindEnv(option.EnableHostFirewall)
 
 	flags.String(option.IPv4NativeRoutingCIDR, "", "Allows to explicitly specify the CIDR for native routing. This value corresponds to the configured cluster-cidr.")
@@ -869,6 +869,7 @@ func init() {
 	option.BindEnv(option.SelectiveRegeneration)
 
 	flags.Bool(option.SkipCRDCreation, false, "Skip Kubernetes Custom Resource Definitions creations")
+	flags.MarkDeprecated(option.SkipCRDCreation, "This will be deprecated in 1.10, and the flag will be removed in 1.11")
 	option.BindEnv(option.SkipCRDCreation)
 
 	flags.String(option.WriteCNIConfigurationWhenReady, "", fmt.Sprintf("Write the CNI configuration as specified via --%s to path when agent is ready", option.ReadCNIConfiguration))
@@ -1694,6 +1695,11 @@ func runDaemon() {
 		log.WithError(err).Warn("Failed to send agent start monitor message")
 	}
 
+	// clean up all arp PERM entries that might have previously set by
+	// a Cilium instance
+	if !d.datapath.Node().NodeNeighDiscoveryEnabled() {
+		d.datapath.Node().NodeCleanNeighbors()
+	}
 	// Start periodical arping to refresh neighbor table
 	if d.datapath.Node().NodeNeighDiscoveryEnabled() && option.Config.ARPPingRefreshPeriod != 0 {
 		d.nodeDiscovery.Manager.StartNeighborRefresh(d.datapath.Node())

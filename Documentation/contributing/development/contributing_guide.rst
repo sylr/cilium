@@ -16,7 +16,7 @@ Clone and Provision Environment
 #. Make sure you have a `GitHub account <https://github.com/join>`_
 #. Clone the cilium repository into your ``GOPATH``.
 
-   ::
+   .. code-block:: shell-session
 
       mkdir -p $GOPATH/src/github.com/cilium
       cd $GOPATH/src/github.com/cilium
@@ -414,7 +414,7 @@ steps 1 to 2 times per day. Works best if done first thing in the working day.
 
 #. If the PR is a backport PR, update the labels of cherry-picked PRs with the command included at the end of the original post. For example:
 
-   .. code-block:: bash
+   .. code-block:: shell-session
    
        $ for pr in 12589 12568; do contrib/backporting/set-labels.py $pr done 1.8; done
 
@@ -472,6 +472,35 @@ original author of that PR directly so they can backport the PR themselves.
 Follow the :ref:`backport_process` guide to know how to perform this task.
 
 .. _dev_coo:
+
+Coordination
+++++++++++++
+
+In general, coordinating in the #launchpad Slack channel with the other hat
+owner for the week is encouraged. It can reduce your workload and it will avoid
+backporting conflicts such as opening a PR with the same backports. Such
+discussions will typically revolve around which branches to tackle and which
+day of the week.
+
+An example interaction in #launchpad:
+
+::
+
+    Starting backport round for v1.7 and v1.8 now
+    cc @other-hat-wearer
+
+The other hat owner can then handle v1.9 and v1.10 backports the next day, for
+example.
+
+If there are many backports to be done, then splitting up the rounds can be
+beneficial. Typically, backporters opt to start a round in the beginning of the
+week and then another near the end of the week.
+
+By the start / end of the week, if there are other backport PRs that haven't
+been merged, then please coordinate with the previous / next backporter to
+check what the status is and establish who will work on getting the backports
+into the tree (for instance by investigating CI failures and addressing review
+feedback). There's leeway to negotiate depending on who has time available.
 
 Developer's Certificate of Origin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

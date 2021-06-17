@@ -17,7 +17,7 @@ On Freeze date
 
 #. Fork a new release branch from master:
 
-   ::
+   .. code-block:: shell-session
 
        git checkout master; git pull origin master
        git checkout -b v1.2
@@ -54,7 +54,7 @@ On Freeze date
 #. Commit changes, open a pull request against the new ``v1.2`` branch, and get
    the pull request merged
 
-   ::
+   .. code-block:: shell-session
 
        git checkout -b pr/prepare-v1.2
        git add [...]
@@ -77,13 +77,13 @@ On Freeze date
    * A new section is added for the upcoming release that is being prepared, and
    * The section for the oldest release is removed.
 
-   ::
+   .. code-block:: shell-session
 
-       git checkout -b pr/master-cilium-actions-update origin/master
-       # modify .github/cilium-actions.yml
-       git add .github/cilium-actions.yml
-       git commit
-       git push
+       $ git checkout -b pr/master-cilium-actions-update origin/master
+       $ # modify .github/cilium-actions.yml
+       $ git add .github/cilium-actions.yml
+       $ git commit
+       $ git push
 
 #. Continue with the next step only after the previous steps are merged into
    master.
@@ -106,7 +106,7 @@ On Freeze date
 
 #. Prepare the master branch for the next development cycle:
 
-   ::
+   .. code-block:: shell-session
 
        git checkout master; git pull
 
@@ -114,7 +114,7 @@ On Freeze date
 #. Add the ``VERSION`` file using ``git add`` and create & merge a PR titled
    ``Prepare for 1.3.0 development``.
 #. Update the release branch on
-    `Jenkins <https://jenkins.cilium.io/job/cilium-ginkgo/job/cilium/>`_ to be
+    `Jenkins <https://jenkins.cilium.io/>`_ to be
     tested on every change and Nightly.
 #. (Only 1.0 minor releases) Tag newest 1.0.x Docker image as ``v1.0-stable``
    and push it to Docker Hub. This will ensure that Kops uses latest 1.0 release by default.

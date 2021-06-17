@@ -41,6 +41,10 @@ const (
 	// compatible with MetalLB's configuration.
 	BGPConfigPath = "bgp-config-path"
 
+	// SkipCRDCreation specifies whether the CustomResourceDefinition will be
+	// disabled for the operator
+	SkipCRDCreation = "skip-crd-creation"
+
 	// CNPNodeStatusGCInterval is the GC interval for nodes which have been
 	// removed from the cluster in CiliumNetworkPolicy and
 	// CiliumClusterwideNetworkPolicy Status.
@@ -148,10 +152,6 @@ const (
 
 	// ParallelAllocWorkers specifies the number of parallel workers to be used for IPAM allocation
 	ParallelAllocWorkers = "parallel-alloc-workers"
-
-	// UpdateEC2AdapterLimitViaAPIDeprecated configures the operator to use the EC2
-	// API to fill out the instancetype to adapter limit mapping.
-	UpdateEC2AdapterLimitViaAPIDeprecated = "update-ec2-apdater-limit-via-api"
 
 	// UpdateEC2AdapterLimitViaAPI configures the operator to use the EC2
 	// API to fill out the instancetype to adapter limit mapping.
@@ -278,6 +278,10 @@ type OperatorConfig struct {
 	// compatible with MetalLB's configuration.
 	BGPConfigPath string
 
+	// SkipCRDCreation disables creation of the CustomResourceDefinition
+	// for the operator
+	SkipCRDCreation bool
+
 	// IPAM options
 
 	// IPAMAPIBurst is the burst value allowed when accessing external IPAM APIs
@@ -394,6 +398,7 @@ func (c *OperatorConfig) Populate() {
 	c.LeaderElectionRetryPeriod = viper.GetDuration(LeaderElectionRetryPeriod)
 	c.BGPAnnounceLBIP = viper.GetBool(BGPAnnounceLBIP)
 	c.BGPConfigPath = viper.GetString(BGPConfigPath)
+	c.SkipCRDCreation = viper.GetBool(SkipCRDCreation)
 
 	if c.BGPAnnounceLBIP {
 		c.SyncK8sServices = true
@@ -404,8 +409,7 @@ func (c *OperatorConfig) Populate() {
 	// AWS options
 
 	c.AWSReleaseExcessIPs = viper.GetBool(AWSReleaseExcessIPs)
-	c.UpdateEC2AdapterLimitViaAPI = viper.GetBool(UpdateEC2AdapterLimitViaAPIDeprecated) ||
-		viper.GetBool(UpdateEC2AdapterLimitViaAPI)
+	c.UpdateEC2AdapterLimitViaAPI = viper.GetBool(UpdateEC2AdapterLimitViaAPI)
 	c.EC2APIEndpoint = viper.GetString(EC2APIEndpoint)
 
 	// Azure options
