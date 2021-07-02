@@ -159,6 +159,7 @@ assignees
 au
 authenticator
 autoDirectNodeRoutes
+autoMount
 autoProtectPortRange
 awk
 aws
@@ -297,6 +298,7 @@ dev
 devel
 dialTimeout
 diff
+disableEndpointCRD
 disableEnvoyVersionCheck
 disableIptablesFeederRules
 disassembly
@@ -412,6 +414,7 @@ healthz
 herokuapp
 hexData
 hoc
+hostRoot
 hostConfDirMountPath
 hostFirewall
 hostNetwork
@@ -912,6 +915,7 @@ xfrm
 xml
 xor
 xoring
+xt
 xwing
 xxxxx
 yaml

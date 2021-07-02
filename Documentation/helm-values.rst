@@ -1,3 +1,6 @@
+..
+  AUTO-GENERATED. Please DO NOT edit manually.
+
 
 .. list-table::
    :header-rows: 1
@@ -19,7 +22,7 @@
      - bool
      - ``false``
    * - autoDirectNodeRoutes
-     - 
+     - Enable installation of PodCIDR routes between worker nodes if worker nodes share a common L2 network segment.
      - bool
      - ``false``
    * - azure.enabled
@@ -43,15 +46,15 @@
      - bool
      - ``false``
    * - bpf.clockProbe
-     - 
+     - Enable BPF clock source probing for more efficient tick retrieval.
      - bool
      - ``false``
    * - bpf.lbMapMax
-     - Configure the maximum number of entries in the TCP connection tracking table. ctTcpMax: '524288' -- Configure the maximum number of entries for the non-TCP connection tracking table. ctAnyMax: '262144' -- Configure the maximum number of service entries in the load balancer maps.
+     - Configure the maximum number of service entries in the load balancer maps.
      - int
      - ``65536``
    * - bpf.monitorAggregation
-     - Configure auto-sizing for all BPF maps based on available memory. ref: https://docs.cilium.io/en/v1.9/concepts/ebpf/maps/#ebpf-maps -- Configure the level of aggregation for monitor notifications. Valid options are none, low, medium, maximum
+     - Configure the level of aggregation for monitor notifications. Valid options are none, low, medium, maximum.
      - string
      - ``"medium"``
    * - bpf.monitorFlags
@@ -63,7 +66,7 @@
      - string
      - ``"5s"``
    * - bpf.policyMapMax
-     - Configure the maximum number of entries for the NAT table. natMax: 524288 -- Configure the maximum number of entries for the neighbor table. neighMax: 524288 -- Configure the maximum number of entries in endpoint policy map. (per endpoint)
+     - Configure the maximum number of entries in endpoint policy map (per endpoint).
      - int
      - ``16384``
    * - bpf.preallocateMaps
@@ -86,6 +89,18 @@
      - Seconds after which the completed job pod will be deleted
      - int
      - ``1800``
+   * - cgroup
+     - Configure cgroup related configuration
+     - object
+     - ``{"autoMount":{"enabled":true},"hostRoot":"/run/cilium/cgroupv2"}``
+   * - cgroup.autoMount.enabled
+     - Enable auto mount of cgroup2 filesystem. When ``autoMount`` is enabled, cgroup2 filesystem is mounted at ``cgroup.hostRoot`` path on the underlying host and inside the cilium agent pod. If users disable ``autoMount``\ , it's expected that users have mounted cgroup2 filesystem at the specified ``cgroup.hostRoot`` volume, and then the volume will be mounted inside the cilium agent pod at the same path.
+     - bool
+     - ``true``
+   * - cgroup.hostRoot
+     - Configure cgroup root where cgroup2 filesystem is mounted on the host (see also: ``cgroup.autoMount``\ )
+     - string
+     - ``"/run/cilium/cgroupv2"``
    * - cleanBpfState
      - Clean all eBPF datapath state from the initContainer of the cilium-agent DaemonSet. WARNING: Use with care!
      - bool
@@ -109,7 +124,7 @@
    * - clustermesh.apiserver.image
      - Clustermesh API server image.
      - object
-     - ``{"digest":"sha256:c5dbcb2708529e4a3ccc007183d99c5171df5ee1db7e7218d48d7660c8158193","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/clustermesh-apiserver","tag":"v1.10.0","useDigest":true}``
+     - ``{"digest":"sha256:a201c1bfdc67b7e583f476a1a4b95f28cec692f58a1eef30046b4c0bfd3e5a08","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/clustermesh-apiserver","tag":"v1.10.1","useDigest":true}``
    * - clustermesh.apiserver.nodeSelector
      - Node labels for pod assignment ref: https://kubernetes.io/docs/user-guide/node-selection/
      - object
@@ -139,11 +154,11 @@
      - int
      - ``32379``
    * - clustermesh.apiserver.service.type
-     - 
+     - The type of service used for apiserver access.
      - string
      - ``"NodePort"``
    * - clustermesh.apiserver.tls.admin
-     - base64 encoded PEM values for the clustermesh-apiserver admin certificate and private key Used if 'auto' is not enabled.
+     - base64 encoded PEM values for the clustermesh-apiserver admin certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","key":""}``
    * - clustermesh.apiserver.tls.auto
@@ -171,15 +186,15 @@
      - string
      - ``""``
    * - clustermesh.apiserver.tls.client
-     - base64 encoded PEM values for the clustermesh-apiserver client certificate and private key Used if 'auto' is not enabled.
+     - base64 encoded PEM values for the clustermesh-apiserver client certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","key":""}``
    * - clustermesh.apiserver.tls.remote
-     - base64 encoded PEM values for the clustermesh-apiserver remote cluster certificate and private key Used if 'auto' is not enabled.
+     - base64 encoded PEM values for the clustermesh-apiserver remote cluster certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","key":""}``
    * - clustermesh.apiserver.tls.server
-     - base64 encoded PEM values for the clustermesh-apiserver server certificate and private key Used if 'auto' is not enabled.
+     - base64 encoded PEM values for the clustermesh-apiserver server certificate and private key. Used if 'auto' is not enabled.
      - object
      - ``{"cert":"","key":""}``
    * - clustermesh.apiserver.tolerations
@@ -211,7 +226,7 @@
      - string
      - ``"/etc/cni/net.d"``
    * - cni.configMapKey
-     - Specify the path to a CNI config to read from on agent start. This can be useful if you want to manage your CNI configuration outside of a Kubernetes environment. This parameter is mutually exclusive with the 'cni.configMap' parameter. readCniConf: /host/etc/cni/net.d/05-cilium.conf -- When defined, configMap will mount the provided value as ConfigMap and interpret the cniConf variable as CNI configuration file and write it when the agent starts up configMap: cni-configuration -- Configure the key in the CNI ConfigMap to read the contents of the CNI configuration from.
+     - Configure the key in the CNI ConfigMap to read the contents of the CNI configuration from.
      - string
      - ``"cni-config"``
    * - cni.customConf
@@ -231,13 +246,17 @@
      - bool
      - ``true``
    * - containerRuntime
-     - Configure how frequently garbage collection should occur for the datapath connection tracking table. conntrackGCInterval: "0s" -- Configure container runtime specific integration.
+     - Configure container runtime specific integration.
      - object
      - ``{"integration":"none"}``
    * - containerRuntime.integration
      - Enables specific integrations for container runtimes. Supported values: - containerd - crio - docker - none - auto (automatically detect the container runtime)
      - string
      - ``"none"``
+   * - customCalls
+     - Tail call hooks for custom eBPF programs.
+     - object
+     - ``{"enabled":false}``
    * - customCalls.enabled
      - Enable tail call hooks for custom eBPF programs.
      - bool
@@ -259,7 +278,7 @@
      - object
      - ``{"enabled":false}``
    * - enableCnpStatusUpdates
-     - Specify which network interfaces can run the eBPF datapath. This means that a packet sent from a pod to a destination outside the cluster will be masqueraded (to an output device IPv4 address), if the output device runs the program. When not specified, probing will automatically detect devices. devices: "" TODO: Add documentation disableIptablesFeederRules: "" TODO: Add documentation egressMasqueradeInterfaces: ""
+     - Whether to enable CNP status updates.
      - bool
      - ``false``
    * - enableCriticalPriorityClass
@@ -267,7 +286,7 @@
      - bool
      - ``true``
    * - enableIPv4Masquerade
-     - hashSeed is the cluster-wide base64 encoded seed for the hashing hashSeed: -- Enables masquerading of IPv4 traffic leaving the node from endpoints.
+     - Enables masquerading of IPv4 traffic leaving the node from endpoints.
      - bool
      - ``true``
    * - enableIPv6Masquerade
@@ -279,7 +298,7 @@
      - bool
      - ``false``
    * - enableXTSocketFallback
-     - 
+     - Enables the fallback compatibility solution for when the xt_socket kernel module is missing and it is needed for the datapath L7 redirection to work properly. See documentation for details on when this can be disabled: http://docs.cilium.io/en/stable/install/system_requirements/#admin-kernel-version.
      - bool
      - ``true``
    * - encryption.enabled
@@ -327,7 +346,7 @@
      - string
      - ``"ipsec"``
    * - endpointHealthChecking.enabled
-     - 
+     - Enable connectivity health checking between virtual endpoints.
      - bool
      - ``true``
    * - endpointRoutes.enabled
@@ -383,19 +402,19 @@
      - list
      - ``["https://CHANGE-ME:2379"]``
    * - etcd.extraArgs
-     - Additional cilium-etcd-operator container arguments
+     - Additional cilium-etcd-operator container arguments.
      - list
      - ``[]``
    * - etcd.extraConfigmapMounts
-     - Additional cilium-etcd-operator ConfigMap mounts
+     - Additional cilium-etcd-operator ConfigMap mounts.
      - list
      - ``[]``
    * - etcd.extraHostPathMounts
-     - Additional cilium-etcd-operator hostPath mounts
+     - Additional cilium-etcd-operator hostPath mounts.
      - list
      - ``[]``
    * - etcd.extraInitContainers
-     - Additional InitContainers to initialize the pod
+     - Additional InitContainers to initialize the pod.
      - list
      - ``[]``
    * - etcd.image
@@ -459,7 +478,7 @@
      - bool
      - ``false``
    * - extraArgs
-     - Additional agent container arguments
+     - Additional agent container arguments.
      - list
      - ``[]``
    * - extraConfig
@@ -467,19 +486,19 @@
      - object
      - ``{}``
    * - extraConfigmapMounts
-     - Additional agent ConfigMap mounts
+     - Additional agent ConfigMap mounts.
      - list
      - ``[]``
    * - extraEnv
-     - Additional agent container environment variables
+     - Additional agent container environment variables.
      - object
      - ``{}``
    * - extraHostPathMounts
-     - Additional agent hostPath mounts
+     - Additional agent hostPath mounts.
      - list
      - ``[]``
    * - extraInitContainers
-     - Additional InitContainers to initialize the pod
+     - Additional InitContainers to initialize the pod.
      - list
      - ``[]``
    * - gke.enabled
@@ -487,7 +506,7 @@
      - bool
      - ``false``
    * - healthChecking
-     - 
+     - Enable connectivity health checking.
      - bool
      - ``true``
    * - healthPort
@@ -523,7 +542,7 @@
      - string
      - ``":4244"``
    * - hubble.metrics
-     - Buffer size of the channel Hubble uses to receive monitor events. If this value is not set, the queue size is set to the default monitor queue size. eventQueueSize: "" -- Number of recent flows for Hubble to cache. Defaults to 4095. Possible values are:   1, 3, 7, 15, 31, 63, 127, 255, 511, 1023,   2047, 4095, 8191, 16383, 32767, 65535 eventBufferCapacity: "4095" -- Hubble metrics configuration. See https://docs.cilium.io/en/stable/configuration/metrics/#hubble-metrics for more comprehensive documentation about Hubble metrics.
+     - Hubble metrics configuration. See https://docs.cilium.io/en/stable/configuration/metrics/#hubble-metrics for more comprehensive documentation about Hubble metrics.
      - object
      - ``{"enabled":null,"port":9091,"serviceMonitor":{"enabled":false}}``
    * - hubble.metrics.enabled
@@ -538,10 +557,6 @@
      - Create ServiceMonitor resources for Prometheus Operator. This requires the prometheus CRDs to be available. ref: https://github.com/prometheus-operator/prometheus-operator/blob/master/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml)
      - bool
      - ``false``
-   * - hubble.metricsServer
-     - 
-     - string
-     - ``""``
    * - hubble.relay.dialTimeout
      - Dial timeout to connect to the local hubble instance to receive peer information (e.g. "30s").
      - string
@@ -553,7 +568,7 @@
    * - hubble.relay.image
      - Hubble-relay container image.
      - object
-     - ``{"digest":"sha256:e92e6778c71aa9e181618d61e9403761ad061c3960a9203aa2cf8e6cde95c9d7","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/hubble-relay","tag":"v1.10.0","useDigest":true}``
+     - ``{"digest":"sha256:6f0d6b5698ab87b58923237caa071b5d7eb3e83ffd688e5e70a8edeca7a06cf4","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/hubble-relay","tag":"v1.10.1","useDigest":true}``
    * - hubble.relay.listenHost
      - Host to listen to. Specify an empty string to bind to all the interfaces.
      - string
@@ -667,11 +682,11 @@
      - object
      - ``{"pullPolicy":"IfNotPresent","repository":"quay.io/cilium/hubble-ui-backend","tag":"v0.7.9@sha256:632c938ef6ff30e3a080c59b734afb1fb7493689275443faa1435f7141aabe76"}``
    * - hubble.ui.backend.resources
-     - 
+     - Resource requests and limits for the 'backend' container of the 'hubble-ui' deployment.
      - object
      - ``{}``
    * - hubble.ui.enabled
-     - 
+     - Whether to enable the Hubble UI.
      - bool
      - ``false``
    * - hubble.ui.frontend.image
@@ -679,7 +694,7 @@
      - object
      - ``{"pullPolicy":"IfNotPresent","repository":"quay.io/cilium/hubble-ui","tag":"v0.7.9@sha256:e0e461c680ccd083ac24fe4f9e19e675422485f04d8720635ec41f2ba9e5562c"}``
    * - hubble.ui.frontend.resources
-     - 
+     - Resource requests and limits for the 'frontend' container of the 'hubble-ui' deployment.
      - object
      - ``{}``
    * - hubble.ui.ingress
@@ -703,11 +718,11 @@
      - object
      - ``{"pullPolicy":"IfNotPresent","repository":"docker.io/envoyproxy/envoy","tag":"v1.18.2@sha256:e8b37c1d75787dd1e712ff389b0d37337dc8a174a63bed9c34ba73359dc67da7"}``
    * - hubble.ui.proxy.resources
-     - 
+     - Resource requests and limits for the 'proxy' container of the 'hubble-ui' deployment.
      - object
      - ``{}``
    * - hubble.ui.replicas
-     - 
+     - The number of replicas of Hubble UI to deploy.
      - int
      - ``1``
    * - hubble.ui.rollOutPods
@@ -715,7 +730,7 @@
      - bool
      - ``false``
    * - hubble.ui.securityContext.enabled
-     - 
+     - Whether to set the security context on the Hubble UI pods.
      - bool
      - ``true``
    * - hubble.ui.tolerations
@@ -727,19 +742,19 @@
      - object
      - ``{"rollingUpdate":{"maxUnavailable":1},"type":"RollingUpdate"}``
    * - identityAllocationMode
-     - 
+     - Method to use for identity allocation (\ ``crd`` or ``kvstore``\ ).
      - string
      - ``"crd"``
    * - image
      - Agent container image.
      - object
-     - ``{"digest":"sha256:587627d909ffe0418c0bd907516496844867a21812946af82096d367760e4c1e","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/cilium","tag":"v1.10.0","useDigest":true}``
+     - ``{"digest":"sha256:f5fcdfd4929af5a8903b02da61332eea41dcdb512420b8c807e2e2904270561c","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/cilium","tag":"v1.10.1","useDigest":true}``
    * - imagePullSecrets
      - Configure image pull secrets for pulling container images
      - string
      - ``nil``
    * - installIptablesRules
-     - 
+     - Configure whether to install iptables rules to allow for TPROXY (L7 proxy injection), iptables-based masquerading and compatibility with kube-proxy.
      - bool
      - ``true``
    * - installNoConntrackIptablesRules
@@ -787,7 +802,7 @@
      - object
      - ``{}``
    * - keepDeprecatedLabels
-     - requireIPv6PodCIDR enables waiting for Kubernetes to provide the PodCIDR range via the Kubernetes node resource requireIPv6PodCIDR: false -- Keep the deprecated selector labels when deploying Cilium DaemonSet
+     - Keep the deprecated selector labels when deploying Cilium DaemonSet.
      - bool
      - ``false``
    * - keepDeprecatedProbes
@@ -795,7 +810,7 @@
      - bool
      - ``false``
    * - kubeProxyReplacementHealthzBindAddr
-     - Configure the kube-proxy replacement in Cilium BPF datapath Valid options are "disabled", "probe", "partial", "strict". ref: https://docs.cilium.io/en/stable/gettingstarted/kubeproxy-free/ -- healthz server bind address for the kube-proxy replacement. To enable set the value to '0.0.0.0:10256' for all ipv4 addresses and this '[::]:10256' for all ipv6 addresses. By default it is disabled.
+     - healthz server bind address for the kube-proxy replacement. To enable set the value to '0.0.0.0:10256' for all ipv4 addresses and this '[::]:10256' for all ipv6 addresses. By default it is disabled.
      - string
      - ``""``
    * - l7Proxy
@@ -803,11 +818,11 @@
      - bool
      - ``true``
    * - localRedirectPolicy
-     - 
+     - Enable Local Redirect Policy.
      - bool
      - ``false``
    * - logSystemLoad
-     - 
+     - Enables periodic logging of system load
      - bool
      - ``false``
    * - maglev
@@ -815,15 +830,19 @@
      - object
      - ``{}``
    * - monitor
-     - Specify the CIDR for native routing (ie to avoid IP masquerade for). This value corresponds to the configured cluster-cidr. nativeRoutingCIDR: -- Configure cilium-monitor sidecar
+     - Specify the CIDR for native routing (ie to avoid IP masquerade for). This value corresponds to the configured cluster-cidr. nativeRoutingCIDR:
      - object
      - ``{"enabled":false}``
+   * - monitor.enabled
+     - Enable the cilium-monitor sidecar.
+     - bool
+     - ``false``
    * - name
      - Agent container name.
      - string
      - ``"cilium"``
    * - nodePort
-     - Configure service load balancing loadBalancer: -- standalone enables the standalone L4LB which does not connect to kube-apiserver. standalone: false -- algorithm is the name of the load balancing algorithm for backend selection e.g. random or maglev algorithm: random -- mode is the operation mode of load balancing for remote backends e.g. snat, dsr, hybrid mode: snat -- acceleration is the option to accelerate service handling via XDP e.g. native, disabled acceleration: disabled -- dsrDispatch configures whether IP option or IPIP encapsulation is used to pass a service IP and port to remote backend dsrDispatch: opt -- Configure N-S k8s service loadbalancing
+     - Configure N-S k8s service loadbalancing
      - object
      - ``{"autoProtectPortRange":true,"bindProtection":true,"enableHealthCheck":true,"enabled":false}``
    * - nodePort.autoProtectPortRange
@@ -831,7 +850,7 @@
      - bool
      - ``true``
    * - nodePort.bindProtection
-     - Port range to use for NodePort services. range: "30000,32767" -- Set to true to prevent applications binding to service ports.
+     - Set to true to prevent applications binding to service ports.
      - bool
      - ``true``
    * - nodePort.enableHealthCheck
@@ -851,19 +870,19 @@
      - bool
      - ``false``
    * - nodeinit.extraConfigmapMounts
-     - 
+     - Additional nodeinit ConfigMap mounts.
      - list
      - ``[]``
    * - nodeinit.extraEnv
-     - 
+     - Additional nodeinit environment variables.
      - object
      - ``{}``
    * - nodeinit.extraHostPathMounts
-     - 
+     - Additional nodeinit host path mounts.
      - list
      - ``[]``
    * - nodeinit.extraInitContainers
-     - 
+     - Additional nodeinit init containers.
      - list
      - ``[]``
    * - nodeinit.image
@@ -875,7 +894,7 @@
      - object
      - ``{}``
    * - nodeinit.podAnnotations
-     - Annotations to be added to node-init pods
+     - Annotations to be added to node-init pods.
      - object
      - ``{}``
    * - nodeinit.podDisruptionBudget
@@ -883,11 +902,11 @@
      - object
      - ``{"enabled":true,"maxUnavailable":2}``
    * - nodeinit.podLabels
-     - Labels to be added to node-init pods
+     - Labels to be added to node-init pods.
      - object
      - ``{}``
    * - nodeinit.priorityClassName
-     - 
+     - The priority class to use for the nodeinit pod.
      - string
      - ``""``
    * - nodeinit.resources
@@ -895,7 +914,7 @@
      - object
      - ``{"requests":{"cpu":"100m","memory":"100Mi"}}``
    * - nodeinit.securityContext
-     - Security context to be added to nodeinit pods
+     - Security context to be added to nodeinit pods.
      - object
      - ``{}``
    * - nodeinit.tolerations
@@ -915,41 +934,41 @@
      - bool
      - ``true``
    * - operator.endpointGCInterval
-     - 
+     - Interval for endpoint garbage collection.
      - string
      - ``"5m0s"``
    * - operator.extraArgs
-     - Additional cilium-operator container arguments
+     - Additional cilium-operator container arguments.
      - list
      - ``[]``
    * - operator.extraConfigmapMounts
-     - 
+     - Additional cilium-operator ConfigMap mounts.
      - list
      - ``[]``
    * - operator.extraEnv
-     - 
+     - Additional cilium-operator environment variables.
      - object
      - ``{}``
    * - operator.extraHostPathMounts
-     - Additional cilium-operator hostPath mounts
+     - Additional cilium-operator hostPath mounts.
      - list
      - ``[]``
    * - operator.extraInitContainers
-     - Additional InitContainers to initialize the pod
+     - Additional InitContainers to initialize the pod.
      - list
      - ``[]``
    * - operator.identityGCInterval
-     - 
+     - Interval for identity garbage collection.
      - string
      - ``"15m0s"``
    * - operator.identityHeartbeatTimeout
-     - 
+     - Timeout for identity heartbeats.
      - string
      - ``"30m0s"``
    * - operator.image
      - cilium-operator image.
      - object
-     - ``{"alibabacloudDigest":"sha256:ab68157bd70c6158ec5fc03f17de81639d5a3ee7acd64120c2788354fa6f1cfc","awsDigest":"sha256:c704c40862aa8eecd6ba66d456701f7514b9db57ae956a8e22f640eea89003ed","azureDigest":"sha256:eed06e79fd5efed2fc9ccebd98e5c38c610429334389a3da939a40f701c1f399","genericDigest":"sha256:65143311a62a95dbe23c69ff2f624e0fdf030eb225e6375d889da66a955dd828","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/operator","suffix":"","tag":"v1.10.0","useDigest":true}``
+     - ``{"alibabacloudDigest":"sha256:07d692a357252f04f49bab97c47fe30a75d08d8f9f0896dc1452b335101b8938","awsDigest":"sha256:16c186f8909c6fcdc6c2db7e5ce31fa0616bb44c4b134bee52b005b9ee827b9f","azureDigest":"sha256:ae751480d95d7cd53c130821bc69f11662bc0a2aa283bc1efbe9a10ebdd4ed24","genericDigest":"sha256:a1588ee00a15f2f2b419e4acd36bd57d64a5f10eb52d0fd4de689e558a913cd8","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/operator","suffix":"","tag":"v1.10.1","useDigest":true}``
    * - operator.nodeSelector
      - Node labels for cilium-operator pod assignment ref: https://kubernetes.io/docs/user-guide/node-selection/
      - object
@@ -1023,7 +1042,7 @@
      - object
      - ``{}``
    * - policyEnforcementMode
-     - 
+     - The agent can be put into one of the three policy enforcement modes: default, always and never. ref: https://docs.cilium.io/en/stable/policy/intro/#policy-enforcement-modes
      - string
      - ``"default"``
    * - pprof.enabled
@@ -1035,25 +1054,25 @@
      - bool
      - ``false``
    * - preflight.extraConfigmapMounts
-     - 
+     - Additional preflight ConfigMap mounts.
      - list
      - ``[]``
    * - preflight.extraEnv
-     - 
+     - Additional preflight environment variables.
      - object
      - ``{}``
    * - preflight.extraHostPathMounts
-     - 
+     - Additional preflight host path mounts.
      - list
      - ``[]``
    * - preflight.extraInitContainers
-     - 
+     - Additional preflight init containers.
      - list
      - ``[]``
    * - preflight.image
      - Cilium pre-flight image.
      - object
-     - ``{"digest":"sha256:587627d909ffe0418c0bd907516496844867a21812946af82096d367760e4c1e","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/cilium","tag":"v1.10.0","useDigest":true}``
+     - ``{"digest":"sha256:f5fcdfd4929af5a8903b02da61332eea41dcdb512420b8c807e2e2904270561c","pullPolicy":"IfNotPresent","repository":"quay.io/cilium/cilium","tag":"v1.10.1","useDigest":true}``
    * - preflight.nodeSelector
      - Node labels for preflight pod assignment ref: https://kubernetes.io/docs/user-guide/node-selection/
      - object
@@ -1067,11 +1086,11 @@
      - object
      - ``{"enabled":true,"maxUnavailable":2}``
    * - preflight.podLabels
-     - 
+     - Labels to be added to the preflight pod.
      - object
      - ``{}``
    * - preflight.priorityClassName
-     - 
+     - The priority class to use for the preflight pod.
      - string
      - ``""``
    * - preflight.resources
@@ -1083,7 +1102,7 @@
      - object
      - ``{}``
    * - preflight.tofqdnsPreCache
-     - 
+     - Path to write the ``--tofqdns-pre-cache`` file to.
      - string
      - ``""``
    * - preflight.tolerations
@@ -1099,7 +1118,7 @@
      - bool
      - ``true``
    * - priorityClassName
-     - 
+     - The priority class to use for cilium-agent.
      - string
      - ``""``
    * - prometheus
@@ -1159,21 +1178,17 @@
      - object
      - ``{"annotations":{},"create":true,"name":"hubble-generate-certs"}``
    * - sleepAfterInit
-     - 
+     - Do not run Cilium agent when running with clean mode. Useful to completely uninstall Cilium as it will stop Cilium from starting and create artifacts in the node.
      - bool
      - ``false``
    * - sockops
      - Configure BPF socket operations configuration
      - object
      - ``{"enabled":false}``
-   * - tls.enabled
-     - 
-     - bool
-     - ``true``
-   * - tls.secretsBackend
-     - 
-     - string
-     - ``"local"``
+   * - tls
+     - Configure TLS configuration in the agent.
+     - object
+     - ``{"enabled":true,"secretsBackend":"local"}``
    * - tolerations
      - Node tolerations for agent scheduling to nodes with taints ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
      - list
@@ -1190,4 +1205,3 @@
      - Enable the use of well-known identities.
      - bool
      - ``false``
-

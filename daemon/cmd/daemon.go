@@ -29,7 +29,7 @@ import (
 	"github.com/cilium/cilium/pkg/bandwidth"
 	"github.com/cilium/cilium/pkg/bgp/speaker"
 	"github.com/cilium/cilium/pkg/bpf"
-	"github.com/cilium/cilium/pkg/cgroups"
+	"github.com/cilium/cilium/pkg/cidr"
 	"github.com/cilium/cilium/pkg/clustermesh"
 	"github.com/cilium/cilium/pkg/controller"
 	"github.com/cilium/cilium/pkg/counter"
@@ -258,6 +258,34 @@ func (d *Daemon) init() error {
 func createPrefixLengthCounter() *counter.PrefixLengthCounter {
 	max6, max4 := ipcachemap.IPCache.GetMaxPrefixLengths()
 	return counter.DefaultPrefixLengthCounter(max6, max4)
+}
+
+// restoreCiliumHostIPs completes the `cilium_host` IP restoration process
+// (part 2/2). This function is called after fully syncing with K8s to ensure
+// that the most up-to-date information has been retrieved. At this point, the
+// daemon is aware of all the necessary information to restore the appropriate
+// IP.
+func restoreCiliumHostIPs(ipv6 bool, fromK8s net.IP) {
+	var (
+		cidr   *cidr.CIDR
+		fromFS net.IP
+	)
+
+	if ipv6 {
+		cidr = node.GetIPv6AllocRange()
+		fromFS = node.GetIPv6Router()
+	} else {
+		switch option.Config.IPAMMode() {
+		case ipamOption.IPAMCRD, ipamOption.IPAMENI, ipamOption.IPAMAzure, ipamOption.IPAMAlibabaCloud:
+			// The native routing CIDR is the pod CIDR in these IPAM modes.
+			cidr = option.Config.IPv4NativeRoutingCIDR()
+		default:
+			cidr = node.GetIPv4AllocRange()
+		}
+		fromFS = node.GetInternalIPv4Router()
+	}
+
+	node.RestoreHostIPs(ipv6, fromK8s, fromFS, cidr)
 }
 
 // NewDaemon creates and returns a new Daemon with the parameters set in c.
@@ -578,11 +606,6 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 	handleNativeDevices(isKubeProxyReplacementStrict)
 	finishKubeProxyReplacementInit(isKubeProxyReplacementStrict)
 
-	// Cgroup v2 hierarchy root used for attachment is different when running on Kind.
-	runsOnKind := option.Config.EnableHostReachableServices &&
-		strings.HasPrefix(node.GetProviderID(), "kind://")
-	cgroups.CheckOrMountCgrpFS(option.Config.CGroupRoot, runsOnKind)
-
 	// Launch the K8s watchers in parallel as we continue to process other
 	// daemon options.
 	if k8s.IsEnabled() {
@@ -673,6 +696,13 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		bootstrapStats.kvstore.End(true)
 	}
 
+	// Fetch the router (`cilium_host`) IPs in case they were set a priori from
+	// the Kubernetes or CiliumNode resource in the K8s subsystem from call
+	// k8s.WaitForNodeInformation(). These will be used later after starting
+	// IPAM initialization to finish off the `cilium_host` IP restoration (part
+	// 2/2).
+	router4FromK8s, router6FromK8s := node.GetInternalIPv4Router(), node.GetIPv6Router()
+
 	// Configure IPAM without using the configuration yet.
 	d.configureIPAM()
 
@@ -702,6 +732,18 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 
 	// Start IPAM
 	d.startIPAM()
+
+	// After the IPAM is started, in particular IPAM modes (CRD, ENI, Alibaba)
+	// which use the VPC CIDR as the pod CIDR, we must attempt restoring the
+	// router IPs from the K8s resources if we weren't able to restore them
+	// from the fs. We must do this after IPAM because we must wait until the
+	// K8s resources have been synced. Part 2/2 of restoration.
+	if option.Config.EnableIPv4 {
+		restoreCiliumHostIPs(false, router4FromK8s)
+	}
+	if option.Config.EnableIPv6 {
+		restoreCiliumHostIPs(true, router6FromK8s)
+	}
 
 	// restore endpoints before any IPs are allocated to avoid eventual IP
 	// conflicts later on, otherwise any IP conflict will result in the
