@@ -42,12 +42,15 @@ jobs:
             --version=${SHA} \
             --wait=false \
             --config monitor-aggregation=none"
+          HUBBLE_ENABLE_DEFAULTS="--relay-image=quay.io/${{ github.repository_owner }}/hubble-relay-ci \
+            --relay-version=${SHA}"
           echo ::set-output name=cilium_install_defaults::${CILIUM_INSTALL_DEFAULTS}
+          echo ::set-output name=hubble_enable_defaults::${HUBBLE_ENABLE_DEFAULTS}
           echo ::set-output name=sha::${SHA}
 
       - name: Install Cilium CLI
         run: |
-          curl -LO https://github.com/cilium/cilium-cli/releases/download/v0.8.2/cilium-linux-amd64.tar.gz
+          curl -LO https://github.com/cilium/cilium-cli/releases/download/v0.8.4/cilium-linux-amd64.tar.gz
           sudo tar xzvfC cilium-linux-amd64.tar.gz /usr/bin
           rm cilium-linux-amd64.tar.gz
 
@@ -66,8 +69,9 @@ jobs:
         timeout-minutes: 10
         shell: bash
         run: |
-          until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/cilium-ci/tag/${{ steps.vars.outputs.sha }}/images" &> /dev/null; do sleep 45s; done
-          until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/operator-generic-ci/tag/${{ steps.vars.outputs.sha }}/images" &> /dev/null; do sleep 45s; done
+          for image in cilium-ci operator-generic-ci hubble-relay-ci ; do
+            until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/$image/tag/${{ steps.vars.outputs.sha }}/images" &> /dev/null; do sleep 45s; done
+          done
 
       - name: Install Cilium
         run: |
@@ -75,7 +79,7 @@ jobs:
 
       - name: Enable Relay
         run: |
-          cilium hubble enable
+          cilium hubble enable ${{ steps.vars.outputs.hubble_enable_defaults }}
 
       - name: Status
         run: |
@@ -83,17 +87,18 @@ jobs:
 
       - name: Port forward Relay
         run: |
-          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          cilium hubble port-forward&
           sleep 10s
+          [[ $(pgrep -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay" | wc -l) == 2 ]]
 
       - name: Run connectivity test
         run: |
-          cilium connectivity test
+          cilium connectivity test --flow-validation=disabled
 
       - name: Clean up Cilium
         run: |
           cilium uninstall --wait
-          pgrep -f "kubectl port-forward" | xargs kill -9 # kill background port forwards
+          pkill -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay"
 
       - name: Install Cilium with encryption
         run: |
@@ -102,7 +107,7 @@ jobs:
 
       - name: Enable Relay
         run: |
-          cilium hubble enable
+          cilium hubble enable ${{ steps.vars.outputs.hubble_enable_defaults }}
 
       - name: Wait for Cilium status to be ready
         run: |
@@ -110,17 +115,13 @@ jobs:
 
       - name: Port forward Relay
         run: |
-          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          cilium hubble port-forward&
           sleep 10s
-
-      - name: Restart connectivity test pods
-        run: |
-          kubectl delete pod -n cilium-test --selector=kind=client
-          kubectl delete pod -n cilium-test --selector=kind=echo
+          [[ $(pgrep -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay" | wc -l) == 2 ]]
 
       - name: Run connectivity test
         run: |
-          cilium connectivity test
+          cilium connectivity test --force-deploy --flow-validation=disabled
 
       - name: Post-test information gathering
         if: ${{ always() }}
@@ -129,7 +130,7 @@ jobs:
           kubectl get pods --all-namespaces -o wide
           curl -sLO https://github.com/cilium/cilium-sysdump/releases/latest/download/cilium-sysdump.zip
           python cilium-sysdump.zip --output cilium-sysdump-out
-        shell: bash {0}
+        shell: bash {0} # Disable default fail-fast behaviour so that all commands run independently
 
       - name: Upload artifacts
         if: ${{ always() }}

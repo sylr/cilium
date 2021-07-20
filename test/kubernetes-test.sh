@@ -12,9 +12,11 @@ helm template --validate install/kubernetes/cilium \
   --namespace=kube-system \
   --set image.tag=$1 \
   --set image.repository=quay.io/cilium/cilium-ci \
+  --set image.useDigest=false \
   --set operator.image.repository=quay.io/cilium/operator \
   --set operator.image.tag=$1 \
   --set operator.image.suffix=-ci \
+  --set operator.image.useDigest=false \
   --set debug.enabled=true \
   --set k8s.requireIPv4PodCIDR=true \
   --set pprof.enabled=true \
@@ -63,7 +65,7 @@ test -d kubernetes && rm -rfv kubernetes
 git clone https://github.com/kubernetes/kubernetes.git -b ${KUBERNETES_VERSION} --depth 1
 cd kubernetes
 
-GO_VERSION="1.16.5"
+GO_VERSION="1.16.6"
 sudo rm -fr /usr/local/go
 curl -LO https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz

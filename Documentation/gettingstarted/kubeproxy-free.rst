@@ -382,7 +382,7 @@ per service. If a higher number of backends are provisioned under this setting, 
 difference in reassignments on backend changes will increase.
 
 The ``maglev.hashSeed`` option is recommended to be set in order for Cilium to not rely on the
-fixed built-in seed. The seed is a base64-encoded 16 byte-random number, and can be
+fixed built-in seed. The seed is a base64-encoded 12 byte-random number, and can be
 generated once through ``head -c12 /dev/urandom | base64 -w0``, for example. Every Cilium agent
 in the cluster must use the same hash seed in order for Maglev to work.
 
@@ -392,7 +392,7 @@ given service (with the property of at most 1% difference on backend reassignmen
 
 .. parsed-literal::
 
-    SEED=$(head -c16 /dev/urandom | base64 -w0)
+    SEED=$(head -c12 /dev/urandom | base64 -w0)
     helm install cilium |CHART_RELEASE| \\
         --namespace kube-system \\
         --set kubeProxyReplacement=strict \\
@@ -636,6 +636,12 @@ As an instance example, ``m5n.xlarge`` is used in the config ``nodegroup-config.
       desiredCapacity: 2
       ssh:
         allow: true
+      # taint nodes so that application pods are
+      # not scheduled until Cilium is deployed.
+      taints:
+        - key: "node.cilium.io/agent-not-ready"
+          value: "true"
+          effect: "NoSchedule"
 
 The nodegroup is created with:
 
@@ -1245,6 +1251,13 @@ For more information, ensure that you have the fix `Pull Request <https://github
     48498    getpeername4
     48494    getpeername6
 
+External Access To ClusterIP Services
+*************************************
+
+As per `k8s Service <https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types>`__,
+Cilium's eBPF kube-proxy replacement by default disallows access to a ClusterIP service from outside the cluster.
+This can be allowed by setting ``bpf.lbExternalClusterIP=true``.
+
 Limitations
 ###########
 
@@ -1275,9 +1288,6 @@ Limitations
       release introduces ``EndpointSliceMirroring`` controller that mirrors custom ``Endpoints``
       resources to corresponding ``EndpointSlices`` and thus allowing backing ``Endpoints``
       to work. For a more detailed discussion see :gh-issue:`12438`.
-    * As per `k8s Service <https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types>`__,
-      Cilium's eBPF kube-proxy replacement disallow access of a ClusterIP service
-      from outside a cluster.
 
 Further Readings
 ################

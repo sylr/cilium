@@ -121,8 +121,8 @@ spec:
             httpHeaders:
             - name: "brief"
               value: "true"
-          failureThreshold: 24
-          periodSeconds: 2
+          failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          periodSeconds: {{ .Values.startupProbe.periodSeconds }}
           successThreshold: 1
 {{- end }}
         livenessProbe:
@@ -146,7 +146,7 @@ spec:
             - name: "brief"
               value: "true"
 {{- end }}
-          failureThreshold: 10
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
 {{- if semverCompare "<1.20-0" $k8sVersion }}
           # The initial delay for the liveness probe is intentionally large to
           # avoid an endless kill & restart cycle if in the event that the initial
@@ -155,7 +155,7 @@ spec:
           # of this field.
           initialDelaySeconds: 120
 {{- end }}
-          periodSeconds: 30
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           successThreshold: 1
           timeoutSeconds: 5
         readinessProbe:
@@ -179,11 +179,11 @@ spec:
             - name: "brief"
               value: "true"
 {{- end }}
-          failureThreshold: 3
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
 {{- if semverCompare "<1.20-0" $k8sVersion }}
           initialDelaySeconds: 5
 {{- end }}
-          periodSeconds: 30
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           successThreshold: 1
           timeoutSeconds: 5
 {{- end }}
@@ -382,18 +382,24 @@ spec:
         env:
           - name: CGROUP_ROOT
             value: {{ .Values.cgroup.hostRoot }}
+          - name: BIN_PATH
+            value: {{ .Values.cni.binPath }}
         command:
-          - nsenter
-          - --cgroup=/hostpid1ns/cgroup
-          - --mount=/hostpid1ns/mnt
-          - --
           - sh
           - -c
-          - 'mount | grep "$CGROUP_ROOT type cgroup2" || { echo "Mounting cgroup filesystem..."; mount -t cgroup2 none $CGROUP_ROOT; }'
+          # The statically linked Go program binary is invoked to avoid any
+          # dependency on utilities like sh and mount that can be missing on certain
+          # distros installed on the underlying host. Copy the binary to the
+          # same directory where we install cilium cni plugin so that exec permissions
+          # are available.
+          - 'cp /usr/bin/cilium-mount /hostbin/cilium-mount && nsenter --cgroup=/hostproc/1/ns/cgroup --mount=/hostproc/1/ns/mnt "${BIN_PATH}/cilium-mount" $CGROUP_ROOT; rm /hostbin/cilium-mount'
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}{{ if .Values.image.useDigest }}@{{ .Values.image.digest }}{{ end }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
         volumeMounts:
-          - mountPath: /hostpid1ns
-            name: host-proc-ns
+          - mountPath: /hostproc
+            name: hostproc
+          - mountPath: /hostbin
+            name: cni-path
         securityContext:
           privileged: true
 {{- end }}
@@ -499,9 +505,9 @@ spec:
 {{- if .Values.cgroup.autoMount.enabled }}
       # To mount cgroup2 filesystem on the host
       - hostPath:
-          path: /proc/1/ns
+          path: /proc
           type: Directory
-        name: host-proc-ns
+        name: hostproc
 {{- end }}
       # To keep state between restarts / upgrades for cgroup2 filesystem
       - hostPath:

@@ -9,19 +9,48 @@ on:
   schedule:
     - cron:  '0 2/6 * * *'
   ### FOR TESTING PURPOSES
-  # pull_request:
-  #  types:
-  #    - "labeled"
+  # This workflow runs in the context of `master`, and ignores changes to
+  # workflow files in PRs. For testing changes to this workflow from a PR:
+  # - Make sure the PR uses a branch from the base repository (requires write
+  #   privileges). It will not work with a branch from a fork (missing secrets).
+  # - Uncomment the `pull_request` event below, commit separately with a `DO
+  #   NOT MERGE` message, and push to the PR. As long as the commit is present,
+  #   any push to the PR will trigger this workflow.
+  # - Don't forget to remove the `DO NOT MERGE` commit once satisfied. The run
+  #   will disappear from the PR checks: please provide a direct link to the
+  #   successful workflow run (can be found from Actions tab) in a comment.
+  # 
+  # pull_request: {}
   ###
 
 concurrency:
-  # In case of PR comment, we can't simply append the comment to the group name
-  # as that is too long and results in an error. Instead we check if it's a
-  # trigger phrase and append a simple 'trigger-phrase'.
+  # Structure:
+  # - Workflow name
+  # - Event type
+  # - A unique identifier depending on event type:
+  #   - schedule: SHA
+  #   - issue_comment: PR number
+  #   - pull_request: PR number
+  #
+  # This structure ensures a unique concurrency group name is generated for each
+  # type of testing:
+  # - schedule: {name} schedule {SHA}
+  # - issue_comment: {name} issue_comment {PR number}
+  # - pull_request: {name} pull_request {PR number}
+  #
+  # Note: for `issue_comment` triggers, we additionally need to filter out based
+  # on comment content, otherwise any comment will interrupt workflow runs.
   group: |
-    "${{ github.workflow }} ${{ github.event.issue.pull_request.url || 'scheduled' }}
-     ${{ (startsWith(github.event.comment.body, 'ci-gke') ||
-          startsWith(github.event.comment.body, 'test-me-please')) && 'trigger-phrase' }}"
+    ${{ github.workflow }}
+    ${{ github.event_name }}
+    ${{
+      (github.event_name == 'schedule' && github.sha) ||
+      (github.event_name == 'issue_comment' &&
+        (startsWith(github.event.comment.body, 'ci-gke') ||
+        startsWith(github.event.comment.body, 'test-me-please')) &&
+        github.event.issue.number) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.number)
+    }}
   cancel-in-progress: true
 
 env:
@@ -33,12 +62,12 @@ jobs:
   check_changes:
     name: Deduce required tests from code changes
     if: |
-      (github.event.issue.pull_request && (
+      (github.event_name == 'issue_comment' && (
         startsWith(github.event.comment.body, 'ci-gke') ||
         (startsWith(github.event.comment.body, 'test-me-please'))
       )) ||
       (github.event_name == 'schedule' && github.repository == 'cilium/cilium') ||
-      github.event.label.name == 'ci-run/gke'
+      github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       tested: ${{ steps.tested-tree.outputs.src }}
@@ -73,14 +102,14 @@ jobs:
   installation-and-connectivity:
     needs: check_changes
     if: |
-      (github.event.issue.pull_request && (
+      (github.event_name == 'issue_comment' && (
         startsWith(github.event.comment.body, 'ci-gke') ||
         (startsWith(github.event.comment.body, 'test-me-please') && (needs.check_changes.outputs.tested == 'true'))
       )) ||
       github.event_name == 'schedule' ||
-      github.event.label.name == 'ci-run/gke'
+      github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Set up job variables
         id: vars
@@ -103,7 +132,10 @@ jobs:
             --version=${SHA} \
             --wait=false \
             --config monitor-aggregation=none"
+          HUBBLE_ENABLE_DEFAULTS="--relay-image=quay.io/${{ github.repository_owner }}/hubble-relay-ci \
+            --relay-version=${SHA}"
           echo ::set-output name=cilium_install_defaults::${CILIUM_INSTALL_DEFAULTS}
+          echo ::set-output name=hubble_enable_defaults::${HUBBLE_ENABLE_DEFAULTS}
           echo ::set-output name=sha::${SHA}
           echo ::set-output name=owner::${OWNER}
 
@@ -119,7 +151,7 @@ jobs:
 
       - name: Install Cilium CLI
         run: |
-          curl -LO https://github.com/cilium/cilium-cli/releases/download/v0.8.2/cilium-linux-amd64.tar.gz
+          curl -LO https://github.com/cilium/cilium-cli/releases/download/v0.8.4/cilium-linux-amd64.tar.gz
           sudo tar xzvfC cilium-linux-amd64.tar.gz /usr/bin
           rm cilium-linux-amd64.tar.gz
 
@@ -144,6 +176,7 @@ jobs:
             --machine-type e2-custom-2-4096 \
             --disk-type pd-standard \
             --disk-size 10GB \
+            --node-taints node.cilium.io/agent-not-ready=true:NoSchedule \
             --preemptible
 
       - name: Get cluster credentials
@@ -154,8 +187,9 @@ jobs:
         timeout-minutes: 10
         shell: bash
         run: |
-          until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/cilium-ci/tag/${{ steps.vars.outputs.sha }}/images" &> /dev/null; do sleep 45s; done
-          until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/operator-generic-ci/tag/${{ steps.vars.outputs.sha }}/images" &> /dev/null; do sleep 45s; done
+          for image in cilium-ci operator-generic-ci hubble-relay-ci ; do
+            until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/$image/tag/${{ steps.vars.outputs.sha }}/images" &> /dev/null; do sleep 45s; done
+          done
 
       - name: Install Cilium
         run: |
@@ -163,7 +197,7 @@ jobs:
 
       - name: Enable Relay
         run: |
-          cilium hubble enable
+          cilium hubble enable ${{ steps.vars.outputs.hubble_enable_defaults }}
 
       - name: Wait for Cilium status to be ready
         run: |
@@ -171,17 +205,18 @@ jobs:
 
       - name: Port forward Relay
         run: |
-          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          cilium hubble port-forward&
           sleep 10s
+          [[ $(pgrep -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay" | wc -l) == 2 ]]
 
       - name: Run connectivity test
         run: |
-          cilium connectivity test
+          cilium connectivity test --flow-validation=disabled
 
       - name: Clean up Cilium
         run: |
           cilium uninstall --wait
-          pgrep -f "kubectl port-forward" | xargs kill -9 # kill background port forwards
+          pkill -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay"
 
       - name: Install Cilium with tunnel datapath
         run: |
@@ -190,7 +225,7 @@ jobs:
 
       - name: Enable Relay
         run: |
-          cilium hubble enable
+          cilium hubble enable ${{ steps.vars.outputs.hubble_enable_defaults }}
 
       - name: Wait for Cilium status to be ready
         run: |
@@ -198,8 +233,9 @@ jobs:
 
       - name: Port forward Relay
         run: |
-          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          cilium hubble port-forward&
           sleep 10s
+          [[ $(pgrep -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay" | wc -l) == 2 ]]
 
       - name: Restart connectivity test pods
         run: |
@@ -208,12 +244,12 @@ jobs:
 
       - name: Run connectivity test
         run: |
-          cilium connectivity test
+          cilium connectivity test --flow-validation=disabled
 
       - name: Clean up Cilium
         run: |
           cilium uninstall --wait
-          pgrep -f "kubectl port-forward" | xargs kill -9 # kill background port forwards
+          pkill -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay"
 
       - name: Install Cilium with encryption
         run: |
@@ -222,7 +258,7 @@ jobs:
 
       - name: Enable Relay
         run: |
-          cilium hubble enable
+          cilium hubble enable ${{ steps.vars.outputs.hubble_enable_defaults }}
 
       - name: Wait for Cilium status to be ready
         run: |
@@ -230,8 +266,9 @@ jobs:
 
       - name: Port forward Relay
         run: |
-          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          cilium hubble port-forward&
           sleep 10s
+          [[ $(pgrep -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay" | wc -l) == 2 ]]
 
       - name: Restart connectivity test pods
         run: |
@@ -241,12 +278,12 @@ jobs:
 
       - name: Run connectivity test
         run: |
-          cilium connectivity test
+          cilium connectivity test --flow-validation=disabled
 
       - name: Clean up Cilium
         run: |
           cilium uninstall --wait
-          pgrep -f "kubectl port-forward" | xargs kill -9 # kill background port forwards
+          pkill -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay"
 
       - name: Install Cilium with encryption and tunnel datapath
         run: |
@@ -256,7 +293,7 @@ jobs:
 
       - name: Enable Relay
         run: |
-          cilium hubble enable
+          cilium hubble enable ${{ steps.vars.outputs.hubble_enable_defaults }}
 
       - name: Wait for Cilium status to be ready
         run: |
@@ -264,17 +301,13 @@ jobs:
 
       - name: Port forward Relay
         run: |
-          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          cilium hubble port-forward&
           sleep 10s
-
-      - name: Restart connectivity test pods
-        run: |
-          kubectl delete pod -n cilium-test --selector=kind=client
-          kubectl delete pod -n cilium-test --selector=kind=echo
+          [[ $(pgrep -f "cilium.*hubble.*port-forward|kubectl.*port-forward.*hubble-relay" | wc -l) == 2 ]]
 
       - name: Run connectivity test
         run: |
-          cilium connectivity test
+          cilium connectivity test --force-deploy --flow-validation=disabled
 
       - name: Post-test information gathering
         if: ${{ always() }}
@@ -283,12 +316,13 @@ jobs:
           kubectl get pods --all-namespaces -o wide -v=6
           curl -sLO https://github.com/cilium/cilium-sysdump/releases/latest/download/cilium-sysdump.zip
           python cilium-sysdump.zip --output cilium-sysdump-out
-        shell: bash {0}
+        shell: bash {0} # Disable default fail-fast behaviour so that all commands run independently
 
       - name: Clean up GKE
         if: ${{ always() }}
         run: |
           gcloud container clusters delete ${{ env.clusterName }} --zone ${{ env.zone }} --quiet --async
+        shell: bash {0} # Disable default fail-fast behaviour so that all commands run independently
 
       - name: Upload artifacts
         if: ${{ always() }}

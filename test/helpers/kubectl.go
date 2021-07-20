@@ -316,6 +316,10 @@ func GetCiliumNamespace(integration string) string {
 type Kubectl struct {
 	Executor
 	*serviceCache
+
+	// ciliumOptions is a cache of the most recent configuration options
+	// used to install Cilium via CiliumInstall().
+	ciliumOptions map[string]string
 }
 
 // CreateKubectl initializes a Kubectl helper with the provided vmName and log
@@ -383,6 +387,7 @@ func CreateKubectl(vmName string, log *logrus.Entry) (k *Kubectl) {
 
 	// Clean any leftover resources in the default namespace
 	k.CleanNamespace(DefaultNamespace)
+	k.ciliumOptions = make(map[string]string)
 
 	return k
 }
@@ -2069,15 +2074,22 @@ iteratePods:
 	}
 }
 
+// RedeployDNS deletes the kube-dns pods and does not wait for the deletion
+// to complete. Useful to ensure that the pods are recreated after datapath
+// configuration changes.
+func (kub *Kubectl) RedeployDNS() *CmdRes {
+	return kub.DeleteResource("pod", "-n "+KubeSystemNamespace+" -l "+kubeDNSLabel)
+}
+
 // RedeployKubernetesDnsIfNecessary validates if the Kubernetes DNS is
 // functional and re-deploys it if it is not and then waits for it to deploy
 // successfully and become operational. See ValidateKubernetesDNS() for the
 // list of conditions that must be met for Kubernetes DNS to be considered
 // operational.
-func (kub *Kubectl) RedeployKubernetesDnsIfNecessary() {
+func (kub *Kubectl) RedeployKubernetesDnsIfNecessary(force bool) {
 	ginkgoext.By("Validating if Kubernetes DNS is deployed")
 	err := kub.ValidateKubernetesDNS()
-	if err == nil {
+	if err == nil && !force {
 		ginkgoext.By("Kubernetes DNS is up and operational")
 		return
 	} else {
@@ -2085,7 +2097,7 @@ func (kub *Kubectl) RedeployKubernetesDnsIfNecessary() {
 	}
 
 	ginkgoext.By("Restarting Kubernetes DNS (-l %s)", kubeDNSLabel)
-	res := kub.DeleteResource("pod", "-n "+KubeSystemNamespace+" -l "+kubeDNSLabel)
+	res := kub.RedeployDNS()
 	if !res.WasSuccessful() {
 		ginkgoext.Failf("Unable to delete DNS pods: %s", res.OutputPrettyPrint())
 	}
@@ -2537,6 +2549,8 @@ func (kub *Kubectl) CiliumInstall(filename string, options map[string]string) er
 	if !res.WasSuccessful() {
 		return res.GetErr("Unable to apply YAML")
 	}
+
+	kub.ciliumOptions = options
 
 	return nil
 }
@@ -3645,9 +3659,10 @@ func (kub *Kubectl) GatherLogs(ctx context.Context) {
 	kub.reportMapHost(ctx, testPath, reportCmds)
 
 	reportCmds = map[string]string{
-		"journalctl --no-pager -au kubelet": "kubelet.log",
-		"top -n 1 -b":                       "top.log",
-		"ps aux":                            "ps.log",
+		"journalctl -D /var/log/journal --no-pager -au kubelet":        "kubelet.log",
+		"journalctl -D /var/log/journal --no-pager -au kube-apiserver": "kube-apiserver.log",
+		"top -n 1 -b": "top.log",
+		"ps aux":      "ps.log",
 	}
 
 	kub.reportMapContext(ctx, testPath, reportCmds, LogGathererNamespace, logGathererSelector(false))
@@ -4557,6 +4572,28 @@ func (kub *Kubectl) ensureKubectlVersion() error {
 			path, GetCurrentK8SEnv(), path))
 	if !res.WasSuccessful() {
 		return fmt.Errorf("failed to download kubectl")
+	}
+	return nil
+}
+
+// CiliumOptions returns the most recently used set of options for installing
+// Cilium into the cluster.
+func (kub *Kubectl) CiliumOptions() map[string]string {
+	return kub.ciliumOptions
+}
+
+// NslookupInPod executes 'nslookup' in the given pod until it succeeds or times out.
+func (kub *Kubectl) NslookupInPod(namespace, pod string, target string) (err error) {
+	err2 := WithTimeout(func() bool {
+		res := kub.ExecPodCmd(namespace, pod, fmt.Sprintf("nslookup %s", target))
+		if res.WasSuccessful() {
+			return true
+		}
+		err = fmt.Errorf("error looking up %s from %s/%s: %s", target, namespace, pod, res.CombineOutput().String())
+		return false
+	}, "Could not resolve target name", &TimeoutConfig{Timeout: HelperTimeout})
+	if err2 != nil {
+		return err
 	}
 	return nil
 }
