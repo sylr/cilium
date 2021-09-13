@@ -5,7 +5,9 @@ on:
   pull_request: {}
   push:
     branches:
-      - master
+      - v1.10
+
+permissions: read-all
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.after }}
@@ -19,7 +21,7 @@ jobs:
       docs-tree: ${{ steps.docs-tree.outputs.src }}
     steps:
       - name: Check code changes
-        uses: dorny/paths-filter@78ab00f87740f82aec8ed8826eb4c3c851044126
+        uses: dorny/paths-filter@b2feaf19c27470162a626bd6fa8438ae5b263721
         id: docs-tree
         with:
           filters: |
@@ -49,8 +51,8 @@ jobs:
           entrypoint: ./Documentation/check-build.sh
           args: html
       - name: Send slack notification
-        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
-        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        if: ${{ !success() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@e74cd4e48f4452e8158dc4f8bcfc780ae6203364
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)

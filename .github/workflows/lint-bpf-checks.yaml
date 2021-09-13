@@ -5,7 +5,9 @@ on:
   pull_request: {}
   push:
     branches:
-      - master
+      - v1.10
+
+permissions: read-all
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.after }}
@@ -42,8 +44,8 @@ jobs:
       - name: Run checkpatch.pl
         uses: docker://quay.io/cilium/cilium-checkpatch:cc7e6b5811f46d7b040dedfe2f6b0010c2c51a12@sha256:9160b6ca58eb99a3ed5d567a494b2e2001325ebad32029c5bd17a8ae4df01044
       - name: Send slack notification
-        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
-        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        if: ${{ !success() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@e74cd4e48f4452e8158dc4f8bcfc780ae6203364
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)
@@ -64,8 +66,8 @@ jobs:
         with:
           entrypoint: ./contrib/coccinelle/check-cocci.sh
       - name: Send slack notification
-        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
-        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        if: ${{ !success() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@e74cd4e48f4452e8158dc4f8bcfc780ae6203364
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)
@@ -80,9 +82,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
-        uses: actions/setup-go@37335c7bb261b353407cff977110895fa0b4f7d8
+        uses: actions/setup-go@331ce1d993939866bb63c32c6cbbfd48fa76fc57
         with:
-          go-version: 1.16.6
+          go-version: 1.16.7
       - name: Cache LLVM and Clang
         id: cache-llvm
         uses: actions/cache@c64c572235d810460d0d6876e9c705ad5002b353
@@ -90,7 +92,7 @@ jobs:
           path: $HOME/.clang
           key: llvm-10.0
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1.4.0
+        uses: KyleMayes/install-llvm-action@v1.4.1
         with:
           version: "10.0"
           directory: $HOME/.clang
@@ -109,8 +111,8 @@ jobs:
         run: |
           make -C bpf go_prog_test || (echo "Run 'make -C bpf go_prog_test' locally to investigate failures"; exit 1)
       - name: Send slack notification
-        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
-        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        if: ${{ !success() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@e74cd4e48f4452e8158dc4f8bcfc780ae6203364
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)

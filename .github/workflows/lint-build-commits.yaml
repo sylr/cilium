@@ -3,6 +3,8 @@ name: build-commits
 # Any change in triggers needs to be reflected in the concurrency group.
 on: [pull_request]
 
+permissions: read-all
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -19,9 +21,9 @@ jobs:
           git config --global user.email "github-actions@users.noreply.github.com"
 
       - name: Install Go
-        uses: actions/setup-go@37335c7bb261b353407cff977110895fa0b4f7d8
+        uses: actions/setup-go@331ce1d993939866bb63c32c6cbbfd48fa76fc57
         with:
-          go-version: 1.16.6
+          go-version: 1.16.7
           
       - name: Cache LLVM and Clang
         id: cache-llvm
@@ -31,7 +33,7 @@ jobs:
           key: llvm-10.0
           
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1.4.0
+        uses: KyleMayes/install-llvm-action@v1.4.1
         with:
           version: "10.0"
           directory: $HOME/.clang
@@ -84,8 +86,8 @@ jobs:
         run: git --no-pager log --format=%B -n 1
         
       - name: Send slack notification
-        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
-        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        if: ${{ !success() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@e74cd4e48f4452e8158dc4f8bcfc780ae6203364
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)

@@ -315,7 +315,7 @@ var _ = AfterEach(func() {
 	}
 
 	// This piece of code is to enable zip attachments on Junit Output.
-	if ginkgo.CurrentGinkgoTestDescription().Failed && helpers.IsRunningOnJenkins() {
+	if TestFailed() && helpers.IsRunningOnJenkins() {
 		// ReportDirectory is already created. No check the error
 		path, _ := helpers.CreateReportDirectory()
 		zipFileName := fmt.Sprintf("%s_%s.zip", helpers.MakeUID(), GetTestName())
@@ -323,7 +323,7 @@ var _ = AfterEach(func() {
 
 		_, err := exec.Command(
 			"/bin/bash", "-c",
-			fmt.Sprintf("zip -qr %s %s", zipFilePath, path)).CombinedOutput()
+			fmt.Sprintf("zip -qr \"%s\" \"%s\"", zipFilePath, path)).CombinedOutput()
 		if err != nil {
 			log.WithError(err).Errorf("cannot create zip file '%s'", zipFilePath)
 		}
@@ -331,7 +331,7 @@ var _ = AfterEach(func() {
 		GinkgoPrint("[[ATTACHMENT|%s]]", zipFileName)
 	}
 
-	if !ginkgo.CurrentGinkgoTestDescription().Failed && helpers.IsRunningOnJenkins() {
+	if !TestFailed() && helpers.IsRunningOnJenkins() {
 		// If the test success delete the monitor.log filename to not store all
 		// the data in Jenkins
 		testPath, err := helpers.CreateReportDirectory()

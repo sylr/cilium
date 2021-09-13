@@ -11,6 +11,8 @@ on:
     branches:
       - v1.10
 
+permissions: read-all
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.after }}
   cancel-in-progress: true
@@ -78,7 +80,7 @@ jobs:
       # v1.10 branch pushes
       - name: CI Build ${{ matrix.name }}
         if: ${{ github.event_name != 'pull_request_target' }}
-        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
         id: docker_build_ci_v1_10
         with:
           context: .
@@ -93,7 +95,7 @@ jobs:
 
       - name: CI race detection Build ${{ matrix.name }}
         if: ${{ github.event_name != 'pull_request_target' }}
-        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
         id: docker_build_ci_v1_10_detect_race_condition
         with:
           context: .
@@ -104,7 +106,7 @@ jobs:
             quay.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:v1.10-race
             quay.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}-race
           build-args: |
-            BASE_IMAGE=quay.io/cilium/cilium-runtime:d4a66542a6a5e46ecf8c4f9d851db6ab32c031ce@sha256:9ba0c83b2aac482ce6be626cb3d7b5f0fa7cad78a4c023a83ecfba3efb276a46
+            BASE_IMAGE=quay.io/cilium/cilium-runtime:a1ab864ff010f09a004f4545241a025113d07f4a@sha256:ab07f7251f96d9a943360d15bfe541b96db0a92e1523883f9502371b4d3a6902
             LOCKDEBUG=1
             RACE=1
             OPERATOR_VARIANT=${{ matrix.name }}
@@ -122,7 +124,7 @@ jobs:
       # PR updates
       - name: CI Build ${{ matrix.name }}
         if: ${{ github.event_name == 'pull_request_target' }}
-        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
         id: docker_build_ci_pr
         with:
           context: .
@@ -143,7 +145,7 @@ jobs:
 
       - name: CI race detection Build ${{ matrix.name }}
         if: ${{ github.event_name == 'pull_request_target' }}
-        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
         id: docker_build_ci_pr_detect_race_condition
         with:
           context: .
@@ -153,7 +155,7 @@ jobs:
           tags: |
             quay.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}-race
           build-args: |
-            BASE_IMAGE=quay.io/cilium/cilium-runtime:d4a66542a6a5e46ecf8c4f9d851db6ab32c031ce@sha256:9ba0c83b2aac482ce6be626cb3d7b5f0fa7cad78a4c023a83ecfba3efb276a46
+            BASE_IMAGE=quay.io/cilium/cilium-runtime:a1ab864ff010f09a004f4545241a025113d07f4a@sha256:ab07f7251f96d9a943360d15bfe541b96db0a92e1523883f9502371b4d3a6902
             LOCKDEBUG=1
             RACE=1
             OPERATOR_VARIANT=${{ matrix.name }}
@@ -218,7 +220,7 @@ jobs:
       # v1.10 branch pushes
       - name: CI Build ${{ matrix.name }}
         if: ${{ github.event_name != 'pull_request_target' }}
-        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        uses: docker/build-push-action@a66e35b9cbcf4ad0ea91ffcaf7bbad63ad9e0229
         id: docker_build_ci_v1_10
         with:
           context: .
@@ -246,8 +248,8 @@ jobs:
           retention-days: 1
 
       - name: Send slack notification
-        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
-        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        if: ${{ !success() && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@e74cd4e48f4452e8158dc4f8bcfc780ae6203364
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)

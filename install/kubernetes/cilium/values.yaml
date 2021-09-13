@@ -82,7 +82,7 @@ rollOutCiliumPods: false
 # -- Agent container image.
 image:
   repository: quay.io/cilium/cilium
-  tag: v1.10.3
+  tag: v1.10.4
   pullPolicy: IfNotPresent
   # cilium-digest
   digest: ""
@@ -229,10 +229,6 @@ bgp:
 bpf:
   # -- Enable BPF clock source probing for more efficient tick retrieval.
   clockProbe: false
-
-  # -- Force the cilium-agent DaemonSet to wait in an initContainer until the
-  # eBPF filesystem has been mounted.
-  waitForMount: false
 
   # -- Enables pre-allocation of eBPF map values. This increases
   # memory usage but can reduce latency.
@@ -648,7 +644,7 @@ hubble:
     # -- Hubble-relay container image.
     image:
       repository: quay.io/cilium/hubble-relay
-      tag: v1.10.3
+      tag: v1.10.4
        # hubble-relay-digest
       digest: ""
       useDigest: false
@@ -1213,7 +1209,7 @@ operator:
   # -- cilium-operator image.
   image:
     repository: quay.io/cilium/operator
-    tag: v1.10.3
+    tag: v1.10.4
     # operator-generic-digest
     genericDigest: ""
     # operator-azure-digest
@@ -1437,7 +1433,7 @@ preflight:
   # -- Cilium pre-flight image.
   image:
     repository: quay.io/cilium/cilium
-    tag: v1.10.3
+    tag: v1.10.4
     # cilium-digest
     digest: ""
     useDigest: false
@@ -1549,7 +1545,7 @@ clustermesh:
     # -- Clustermesh API server image.
     image:
       repository: quay.io/cilium/clustermesh-apiserver
-      tag: v1.10.3
+      tag: v1.10.4
       # clustermesh-apiserver-digest
       digest: ""
       useDigest: false
