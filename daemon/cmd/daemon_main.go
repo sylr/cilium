@@ -234,6 +234,9 @@ func init() {
 	flags.Duration(option.ARPPingRefreshPeriod, 5*time.Minute, "Period for remote node ARP entry refresh (set 0 to disable)")
 	option.BindEnv(option.ARPPingRefreshPeriod)
 
+	flags.Bool(option.EnableL2NeighDiscovery, true, "Enables L2 neighbor discovery used by kube-proxy-replacement and IPsec")
+	option.BindEnv(option.EnableL2NeighDiscovery)
+
 	flags.Bool(option.AutoCreateCiliumNodeResource, defaults.AutoCreateCiliumNodeResource, "Automatically create CiliumNode resource for own node on startup")
 	option.BindEnv(option.AutoCreateCiliumNodeResource)
 
@@ -356,6 +359,9 @@ func init() {
 
 	flags.String(option.EgressMasqueradeInterfaces, "", "Limit egress masquerading to interface selector")
 	option.BindEnv(option.EgressMasqueradeInterfaces)
+
+	flags.Bool(option.BPFSocketLBHostnsOnly, false, "Skip socket LB for services when inside a pod namespace, in favor of service LB at the pod interface. Socket LB is still used when in the host namespace. Required by service mesh (e.g., Istio, Linkerd).")
+	option.BindEnv(option.BPFSocketLBHostnsOnly)
 
 	flags.Bool(option.EnableHostReachableServices, false, "Enable reachability of services for host applications")
 	option.BindEnv(option.EnableHostReachableServices)
@@ -572,6 +578,14 @@ func init() {
 	flags.Bool(option.EnableLocalRedirectPolicy, false, "Enable Local Redirect Policy")
 	option.BindEnv(option.EnableLocalRedirectPolicy)
 
+	flags.Bool(option.EnableMKE, false, "Enable BPF kube-proxy replacement for MKE environments")
+	flags.MarkHidden(option.EnableMKE)
+	option.BindEnv(option.EnableMKE)
+
+	flags.String(option.CgroupPathMKE, "", "Cgroup v1 net_cls mount path for MKE environments")
+	flags.MarkHidden(option.CgroupPathMKE)
+	option.BindEnv(option.CgroupPathMKE)
+
 	flags.String(option.NodePortMode, option.NodePortModeSNAT, "BPF NodePort mode (\"snat\", \"dsr\", \"hybrid\")")
 	flags.MarkHidden(option.NodePortMode)
 	option.BindEnv(option.NodePortMode)
@@ -670,6 +684,10 @@ func init() {
 
 	flags.Bool(option.EnableBPFMasquerade, false, "Masquerade packets from endpoints leaving the host with BPF instead of iptables")
 	option.BindEnv(option.EnableBPFMasquerade)
+
+	flags.String(option.DeriveMasqIPAddrFromDevice, "", "Device name from which Cilium derives the IP addr for BPF masquerade")
+	flags.MarkHidden(option.DeriveMasqIPAddrFromDevice)
+	option.BindEnv(option.DeriveMasqIPAddrFromDevice)
 
 	flags.Bool(option.EnableIPMasqAgent, false, "Enable BPF ip-masq-agent")
 	option.BindEnv(option.EnableIPMasqAgent)
@@ -995,6 +1013,10 @@ func init() {
 
 	flags.Bool(option.ExternalClusterIPName, false, "Enable external access to ClusterIP services (default false)")
 	option.BindEnv(option.ExternalClusterIPName)
+
+	flags.Bool(option.BypassIPAvailabilityUponRestore, false, "Bypasses the IP availability error within IPAM upon endpoint restore")
+	flags.MarkHidden(option.BypassIPAvailabilityUponRestore)
+	option.BindEnv(option.BypassIPAvailabilityUponRestore)
 
 	viper.BindPFlags(flags)
 }
@@ -1463,6 +1485,29 @@ func initEnv(cmd *cobra.Command) {
 				"Disabling EndpointSlice support (%q) due to incompatibility with BGP mode. "+
 					"Cilium will fallback to using the original Endpoint resource.",
 				option.K8sEnableEndpointSlice,
+			)
+		}
+	}
+
+	// Ensure that the user does not turn on this mode unless it's for an IPAM
+	// mode which support the bypass.
+	if option.Config.BypassIPAvailabilityUponRestore {
+		switch option.Config.IPAMMode() {
+		case ipamOption.IPAMENI:
+			log.Info(
+				"Running with bypass of IP not available errors upon endpoint " +
+					"restore. Be advised that this mode is intended to be " +
+					"temporary to ease upgrades. Consider restarting the pods " +
+					"which have IPs not from the pool.",
+			)
+		default:
+			option.Config.BypassIPAvailabilityUponRestore = false
+			log.Warnf(
+				"Bypassing IP allocation upon endpoint restore (%q) is enabled with"+
+					"unintended IPAM modes. This bypass is only intended "+
+					"to work for CRD-based IPAM modes such as ENI. Disabling "+
+					"bypass.",
+				option.BypassIPAvailabilityUponRestore,
 			)
 		}
 	}

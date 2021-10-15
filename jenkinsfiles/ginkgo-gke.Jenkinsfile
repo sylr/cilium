@@ -31,7 +31,12 @@ pipeline {
     stages {
         stage('Set build name') {
             when {
-                not {environment name: 'GIT_BRANCH', value: 'origin/master'}
+                not {
+                    anyOf {
+                        environment name: 'ghprbPullTitle', value: null
+                        environment name: 'ghprbPullLink', value: null
+                    }
+                }
             }
             steps {
                    script {
@@ -73,7 +78,7 @@ pipeline {
                         env.DOCKER_TAG = env.DOCKER_TAG + "-race"
                         env.RACE = 1
                         env.LOCKDEBUG = 1
-                        env.BASE_IMAGE = "quay.io/cilium/cilium-runtime:a1ab864ff010f09a004f4545241a025113d07f4a@sha256:ab07f7251f96d9a943360d15bfe541b96db0a92e1523883f9502371b4d3a6902"
+                        env.BASE_IMAGE = "quay.io/cilium/cilium-runtime:b46ef42c866a059a49eb998d38e0c38775942a49@sha256:2625c2909bd105fd42dd876011e9e0b9d4e12515ee12aa1316d8f73851646ce9"
                     }
                 }
             }

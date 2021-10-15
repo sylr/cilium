@@ -40,6 +40,7 @@ require (
 	github.com/go-openapi/swag v0.19.14
 	github.com/go-openapi/validate v0.20.1
 	github.com/gogo/protobuf v1.3.2
+	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.5
 	github.com/google/gopacket v1.1.19
@@ -78,12 +79,13 @@ require (
 	github.com/vishvananda/netlink v1.1.1-0.20210510164352-d17758a128bf
 	github.com/vishvananda/netns v0.0.0-20201230012202-c4f3ca719c73
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20201125193152-8a03d2e9614b
+	go.mongodb.org/mongo-driver v1.5.1 // indirect
 	go.uber.org/goleak v1.1.10
 	go.universe.tf/metallb v0.9.6
 	golang.org/x/crypto v0.0.0-20210503195802-e9a32991a82e
 	golang.org/x/net v0.0.0-20210504132125-bbd867fde50d
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210503173754-0981d6026fa6
+	golang.org/x/sys v0.0.0-20210823070655-63515b42dcdf
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	golang.org/x/tools v0.1.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20210506160403-92e472f520a5

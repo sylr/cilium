@@ -504,6 +504,9 @@ data:
 {{- if ne .Values.hostServices.protocols "tcp,udp" }}
   host-reachable-services-protos: {{ .Values.hostServices.protocols }}
 {{- end }}
+{{- if hasKey .Values.hostServices "hostNamespaceOnly" }}
+  bpf-lb-sock-hostns-only: {{ .Values.hostServices.hostNamespaceOnly | quote }}
+{{- end }}
 {{- end }}
 {{- if hasKey .Values "hostPort" }}
 {{- if eq $kubeProxyReplacement "partial" }}
@@ -562,6 +565,15 @@ data:
 {{- end }}
 {{- if .Values.svcSourceRangeCheck }}
   enable-svc-source-range-check: {{ .Values.svcSourceRangeCheck | quote }}
+{{- end }}
+
+{{- if hasKey .Values "l2NeighDiscovery" }}
+{{- if hasKey .Values.l2NeighDiscovery "enabled" }}
+  enable-l2-neigh-discovery: {{ .Values.l2NeighDiscovery.enabled | quote }}
+{{- end }}
+{{- if hasKey .Values.l2NeighDiscovery "refreshPeriod" }}
+  arping-refresh-period: {{ .Values.l2NeighDiscovery.refreshPeriod | quote }}
+{{- end }}
 {{- end }}
 
 {{- if and .Values.pprof .Values.pprof.enabled }}

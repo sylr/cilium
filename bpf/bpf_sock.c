@@ -79,6 +79,16 @@ void ctx_set_port(struct bpf_sock_addr *ctx, __be16 dport)
 	ctx->user_port = (__u32)dport;
 }
 
+static __always_inline __maybe_unused bool task_in_extended_hostns(void)
+{
+#ifdef ENABLE_MKE
+	/* Extension for non-Cilium managed containers on MKE. */
+	return get_cgroup_classid() == MKE_HOST;
+#else
+	return false;
+#endif
+}
+
 static __always_inline __maybe_unused bool
 ctx_in_hostns(void *ctx __maybe_unused, __net_cookie *cookie)
 {
@@ -87,7 +97,8 @@ ctx_in_hostns(void *ctx __maybe_unused, __net_cookie *cookie)
 
 	if (cookie)
 		*cookie = own_cookie;
-	return own_cookie == get_netns_cookie(NULL);
+	return own_cookie == get_netns_cookie(NULL) ||
+	       task_in_extended_hostns();
 #else
 	if (cookie)
 		*cookie = 0;
@@ -340,6 +351,9 @@ static __always_inline int __sock4_xlate_fwd(struct bpf_sock_addr *ctx,
 	struct lb4_service *backend_slot;
 	bool backend_from_affinity = false;
 	__u32 backend_id = 0;
+
+	if (is_defined(ENABLE_SOCKET_LB_HOST_ONLY) && !in_hostns)
+		return -ENXIO;
 
 	if (!udp_only && !sock_proto_enabled(ctx->protocol))
 		return -ENOTSUP;
@@ -938,6 +952,9 @@ static __always_inline int __sock6_xlate_fwd(struct bpf_sock_addr *ctx,
 	struct lb6_service *backend_slot;
 	bool backend_from_affinity = false;
 	__u32 backend_id = 0;
+
+	if (is_defined(ENABLE_SOCKET_LB_HOST_ONLY) && !in_hostns)
+		return -ENXIO;
 
 	if (!udp_only && !sock_proto_enabled(ctx->protocol))
 		return -ENOTSUP;

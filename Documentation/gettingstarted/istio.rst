@@ -31,6 +31,15 @@ proxy, but that will only work if mTLS is not used.
    other GSGs. 5 GB and 4 CPUs should be enough for this GSG
    (``--vm=true --memory=5120 --cpus=4``).
 
+.. note::
+
+   If Cilium is deployed with the kube-proxy replacement, you need to set
+   ``bpf-lb-sock-hostns-only: true`` in the deployment yaml
+   directly or via ``hostServices.hostNamespaceOnly`` option with Helm.
+   Without this option, when Cilium does service resolution via
+   socket load balancing, Istio sidecar will be bypassed, resulting
+   in loss of Istio features including encryption and telemetry.
+
 Step 2: Install cilium-istioctl
 ===============================
 
@@ -38,25 +47,38 @@ Step 2: Install cilium-istioctl
 
    Make sure that Cilium is running in your cluster before proceeding.
 
-Download the `cilium enhanced istioctl version 1.8.2 <https://github.com/cilium/istio/releases/tag/1.8.2>`_:
+Download the `cilium enhanced istioctl version 1.10.4 <https://github.com/cilium/istio/releases/tag/1.10.4>`_:
 
 .. tabs::
-  .. group-tab:: Linux
+  .. group-tab:: Linux (amd64)
 
     .. code-block:: shell-session
 
-        curl -L https://github.com/cilium/istio/releases/download/1.8.2/cilium-istioctl-1.8.2-linux-amd64.tar.gz | tar xz
+        curl -L https://github.com/cilium/istio/releases/download/1.10.4/cilium-istioctl-1.10.4-linux-amd64.tar.gz | tar xz
+
+  .. group-tab:: Linux (arm64)
+
+    .. code-block:: shell-session
+
+        curl -L https://github.com/cilium/istio/releases/download/1.10.4/cilium-istioctl-1.10.4-linux-arm64.tar.gz | tar xz
 
   .. group-tab:: OSX
 
     .. code-block:: shell-session
 
-        curl -L https://github.com/cilium/istio/releases/download/1.8.2/cilium-istioctl-1.8.2-osx.tar.gz | tar xz
+        curl -L https://github.com/cilium/istio/releases/download/1.10.4/cilium-istioctl-1.10.4-osx.tar.gz | tar xz
+
+  .. group-tab:: OSX (Apple Silicon)
+
+    .. code-block:: shell-session
+
+        curl -L https://github.com/cilium/istio/releases/download/1.10.4/cilium-istioctl-1.10.4-osx-arm64.tar.gz | tar xz
 
 .. note::
 
    Cilium integration, as presented in this Getting Started Guide, has
-   been tested with Kubernetes releases 1.16, 1.17, 1.18, 1.19, 1.20 and 1.21.
+   been tested with Kubernetes releases 1.17, 1.18, 1.19, 1.20 and 1.21.
+   This Istio release does not work with Kubernetes 1.16 or older.
 
 Deploy the default Istio configuration profile onto Kubernetes:
 

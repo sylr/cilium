@@ -345,6 +345,9 @@ github.com/gogo/protobuf/protoc-gen-gogo/plugin
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/vanity
 github.com/gogo/protobuf/vanity/command
+# github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
+## explicit
+github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.4.3
 ## explicit
 github.com/golang/protobuf/jsonpb
@@ -649,7 +652,8 @@ go.etcd.io/etcd/raft/quorum
 go.etcd.io/etcd/raft/raftpb
 go.etcd.io/etcd/raft/tracker
 go.etcd.io/etcd/version
-# go.mongodb.org/mongo-driver v1.4.4
+# go.mongodb.org/mongo-driver v1.5.1
+## explicit
 go.mongodb.org/mongo-driver/bson
 go.mongodb.org/mongo-driver/bson/bsoncodec
 go.mongodb.org/mongo-driver/bson/bsonoptions
@@ -733,7 +737,7 @@ golang.org/x/oauth2/internal
 ## explicit
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20210503173754-0981d6026fa6
+# golang.org/x/sys v0.0.0-20210823070655-63515b42dcdf
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs

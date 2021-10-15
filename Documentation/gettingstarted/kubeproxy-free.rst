@@ -67,8 +67,8 @@ Cilium replacement has been installed:
     $ kubectl -n kube-system delete ds kube-proxy
     $ # Delete the configmap as well to avoid kube-proxy being reinstalled during a kubeadm upgrade (works only for K8s 1.19 and newer)
     $ kubectl -n kube-system delete cm kube-proxy
-    $ # Run on each node:
-    $ iptables-restore <(iptables-save | grep -v KUBE)
+    $ # Run on each node with root permissions:
+    $ iptables-save | grep -v KUBE | iptables-restore
 
 .. include:: k8s-install-download-release.rst
 
@@ -492,6 +492,30 @@ mode would look as follows:
         --set loadBalancer.mode=hybrid \\
         --set k8sServiceHost=REPLACE_WITH_API_SERVER_IP \\
         --set k8sServicePort=REPLACE_WITH_API_SERVER_PORT
+
+Socket LoadBalancer Bypass in Pod Namespace
+*******************************************
+
+Cilium has built-in support for bypassing the socket-level loadbalancer and falling back
+to the tc loadbalancer at the veth interface when a custom redirection/operation relies
+on the original ClusterIP within pod namespace (e.g., Istio side-car).
+
+Setting ``hostServices.hostNamespaceOnly=true`` enables this bypassing mode. When enabled,
+this circumvents socket rewrite in the ``connect()`` and ``sendmsg()`` syscall bpf hook and
+will pass the original packet to next stage of operation (e.g., stack in
+``per-endpoint-routing`` mode) and re-enables service lookup in the tc bpf program.
+
+A Helm example configuration in a kube-proxy-free environment with socket LB bypass
+looks as follows:
+
+.. parsed-literal::
+
+    helm install cilium |CHART_RELEASE| \\
+        --namespace kube-system \\
+        --set tunnel=disabled \\
+        --set autoDirectNodeRoutes=true \\
+        --set kubeProxyReplacement=strict \\
+        --set hostServices.hostNamespaceOnly=true
 
 .. _XDP acceleration:
 
@@ -1222,6 +1246,20 @@ working, take a look at `this KEP
     free mode, make sure that default Kubernetes services like ``kube-dns`` and ``kubernetes``
     have the required label value.
 
+Neighbor Discovery
+******************
+
+When kube-proxy replacement is enabled Cilium does L2 neighbor discovery of nodes in the cluster.
+In some rare cases Cilium may leave stale entries behind in the neighbor table causing packets
+between some nodes to be dropped. To prevent Cilium from performing the neighbor discovery and
+instead rely on the Linux kernel to discover hosts on the same L2 network you can pass the
+``--enable-l2-neigh-discovery=false`` flag to the cilium-agent. However note that relying on the
+Linux Kernel might also cause some packets to be dropped, e.g., a NodePort request can be dropped on
+an intermediate node (i.e., the one which received and is going to forward to a destination node
+which runs the selected service endpoint) if there is no L2 neigh entry in the kernel (due to the
+entry being garbage collected or that ARP resolution has not been done by the kernel). This is
+because Cilium does not drive the ARP resolution from the BPF programs.
+
 Troubleshooting
 ***************
 
@@ -1270,9 +1308,9 @@ Limitations
 
     * Cilium's eBPF kube-proxy replacement currently cannot be used with :ref:`gsg_encryption`.
     * Cilium's eBPF kube-proxy replacement relies upon the :ref:`host-services` feature
-      which uses eBPF cgroup hooks to implement the service translation. The getpeername(2)
-      hook address translation in eBPF is only available for v5.8 kernels. It is known to
-      currently not work with libceph deployments.
+      which uses eBPF cgroup hooks to implement the service translation. Using it with libceph
+      deployments currently requires support for the getpeername(2) hook address translation in
+      eBPF, which is only available for kernels v5.8 and higher.
     * Cilium's eBPF kube-proxy acceleration in XDP can only be used in a single device setup
       as a "one-legged" / hairpin load balancer scenario. In case of a multi-device environment,
       where auto-detection selects more than a single device to expose NodePort, the option

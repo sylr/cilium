@@ -171,6 +171,12 @@ func NewDNSCacheWithLimit(minTTL int, limit int) *DNSCache {
 	return c
 }
 
+func (c *DNSCache) DisableCleanupTrack() {
+	c.Lock()
+	defer c.Unlock()
+	c.cleanup = nil
+}
+
 // Update inserts a new entry into the cache.
 // After insertion cache entries for name are expired and redundant entries
 // evicted. This is O(number of new IPs) for eviction, and O(number of IPs for
@@ -224,6 +230,9 @@ func (c *DNSCache) updateWithEntry(entry *cacheEntry) bool {
 // delete the entry from the policy when it expires.
 // Need to be called with a write lock
 func (c *DNSCache) addNameToCleanup(entry *cacheEntry) {
+	if c.cleanup == nil {
+		return
+	}
 	if c.lastCleanup.IsZero() || entry.ExpirationTime.Before(c.lastCleanup) {
 		c.lastCleanup = entry.ExpirationTime
 	}
@@ -574,15 +583,6 @@ func (c *DNSCache) ForceExpire(expireLookupsBefore time.Time, nameMatch *regexp.
 	}
 
 	return KeepUniqueNames(namesAffected)
-}
-
-// ForceExpireByNames is the same function as ForceExpire but uses the exact
-// names to delete the entries.
-func (c *DNSCache) ForceExpireByNames(expireLookupsBefore time.Time, names []string) (namesAffected []string) {
-	c.Lock()
-	defer c.Unlock()
-
-	return c.forceExpireByNames(expireLookupsBefore, names)
 }
 
 func (c *DNSCache) forceExpireByNames(expireLookupsBefore time.Time, names []string) (namesAffected []string) {

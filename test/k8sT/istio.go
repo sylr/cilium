@@ -38,7 +38,7 @@ var _ = SkipDescribeIf(helpers.RunsOn54Kernel, "K8sIstioTest", func() {
 		// installed.
 		istioSystemNamespace = "istio-system"
 
-		istioVersion = "1.8.2"
+		istioVersion = "1.10.4"
 
 		// Modifiers for pre-release testing, normally empty
 		prerelease     = "" // "-beta.1"
@@ -48,10 +48,10 @@ var _ = SkipDescribeIf(helpers.RunsOn54Kernel, "K8sIstioTest", func() {
 		// - remind how to test with prerelease images in future
 		// - cause CI infra to prepull these images so that they do not
 		//   need to be pulled on demand during the test
-		// " --set values.pilot.image=docker.io/cilium/istio_pilot:1.8.2" +
-		// " --set values.global.proxy.image=docker.io/cilium/istio_proxy:1.8.2" +
-		// " --set values.global.proxy_init.image=docker.io/cilium/istio_proxy:1.8.2" +
-		// " --set values.global.proxy.logLevel=trace"
+		// " --set values.pilot.image=quay.io/cilium/istio_pilot:1.10.4" + prerelease +
+		// " --set values.global.proxy.image=quay.io/cilium/istio_proxy:1.10.4" + prerelease +
+		// " --set values.global.proxy_init.image=quay.io/cilium/istio_proxy:1.10.4" + prerelease +
+		// " --set values.global.proxy.logLevel=debug" +
 		// " --set values.global.logging.level=debug"
 		// " --set values.global.mtls.auto=false"
 		ciliumOptions = map[string]string{
@@ -86,6 +86,10 @@ var _ = SkipDescribeIf(helpers.RunsOn54Kernel, "K8sIstioTest", func() {
 	)
 
 	BeforeAll(func() {
+		if helpers.SkipK8sVersions("<1.17.0") {
+			Skip(fmt.Sprintf("Istio %s requires at least K8s version 1.17", istioVersion))
+		}
+
 		kubectl = helpers.CreateKubectl(helpers.K8s1VMName(), logger)
 
 		By("Downloading cilium-istioctl")

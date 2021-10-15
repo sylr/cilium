@@ -249,17 +249,25 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 		if option.Config.EnableHostServicesUDP {
 			cDefinesMap["ENABLE_HOST_SERVICES_UDP"] = "1"
 		}
-		if option.Config.EnableHostServicesTCP && option.Config.EnableHostServicesUDP {
+		if option.Config.EnableHostServicesTCP && option.Config.EnableHostServicesUDP && !option.Config.BPFSocketLBHostnsOnly {
 			cDefinesMap["ENABLE_HOST_SERVICES_FULL"] = "1"
 		}
 		if option.Config.EnableHostServicesPeer {
 			cDefinesMap["ENABLE_HOST_SERVICES_PEER"] = "1"
+		}
+
+		if option.Config.BPFSocketLBHostnsOnly {
+			cDefinesMap["ENABLE_SOCKET_LB_HOST_ONLY"] = "1"
 		}
 	}
 
 	if option.Config.EnableNodePort {
 		if option.Config.EnableHealthDatapath {
 			cDefinesMap["ENABLE_HEALTH_CHECK"] = "1"
+		}
+		if option.Config.EnableMKE && option.Config.EnableHostReachableServices {
+			cDefinesMap["ENABLE_MKE"] = "1"
+			cDefinesMap["MKE_HOST"] = fmt.Sprintf("%d", option.HostExtensionMKE)
 		}
 		if option.Config.EnableRecorder {
 			cDefinesMap["ENABLE_CAPTURE"] = "1"
