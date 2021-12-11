@@ -410,6 +410,9 @@ const (
 	// PProfPort is the port that the pprof listens on
 	PProfPort = "pprof-port"
 
+	// EnableXDPPrefilter enables XDP-based prefiltering
+	EnableXDPPrefilter = "enable-xdp-prefilter"
+
 	// PrefilterDevice is the device facing external network for XDP prefiltering
 	PrefilterDevice = "prefilter-device"
 
@@ -1193,9 +1196,9 @@ type DaemonConfig struct {
 	Devices             []string   // bpf_host device
 	DirectRoutingDevice string     // Direct routing device (used only by NodePort BPF)
 	LBDevInheritIPAddr  string     // Device which IP addr used by bpf_host devices
+	EnableXDPPrefilter  bool       // Enable XDP-based prefiltering
 	DevicePreFilter     string     // Prefilter device
 	ModePreFilter       string     // Prefilter mode
-	XDPDevice           string     // XDP device
 	XDPMode             string     // XDP mode, values: { xdpdrv | xdpgeneric | none }
 	HostV4Addr          net.IP     // Host v4 address of the snooping device
 	HostV6Addr          net.IP     // Host v6 address of the snooping device
@@ -2119,6 +2122,12 @@ func (c *DaemonConfig) AlwaysAllowLocalhost() bool {
 	}
 }
 
+// TunnelingEnabled returns true if the remote-node identity feature
+// is enabled
+func (c *DaemonConfig) TunnelingEnabled() bool {
+	return c.Tunnel != TunnelDisabled
+}
+
 // RemoteNodeIdentitiesEnabled returns true if the remote-node identity feature
 // is enabled
 func (c *DaemonConfig) RemoteNodeIdentitiesEnabled() bool {
@@ -2430,6 +2439,7 @@ func (c *DaemonConfig) Populate() {
 	c.EnableWireguard = viper.GetBool(EnableWireguard)
 	c.EnableWellKnownIdentities = viper.GetBool(EnableWellKnownIdentities)
 	c.EndpointInterfaceNamePrefix = viper.GetString(EndpointInterfaceNamePrefix)
+	c.EnableXDPPrefilter = viper.GetBool(EnableXDPPrefilter)
 	c.DevicePreFilter = viper.GetString(PrefilterDevice)
 	c.DisableCiliumEndpointCRD = viper.GetBool(DisableCiliumEndpointCRDName)
 	c.EgressMasqueradeInterfaces = viper.GetString(EgressMasqueradeInterfaces)
@@ -2630,7 +2640,6 @@ func (c *DaemonConfig) Populate() {
 	}
 	c.IPv6PodSubnets = subnets
 
-	c.XDPDevice = "undefined"
 	c.XDPMode = XDPModeLinkNone
 
 	err = c.populateNodePortRange()

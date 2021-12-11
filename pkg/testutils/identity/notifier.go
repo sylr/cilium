@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package testutils
+package testidentity
 
 import (
+	"net"
+
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/cilium/pkg/lock"
 	"github.com/cilium/cilium/pkg/policy/api"
@@ -44,12 +46,12 @@ func (d *DummyIdentityNotifier) Unlock() {
 }
 
 // RegisterForIdentityUpdatesLocked starts managing this selector.
-func (d *DummyIdentityNotifier) RegisterForIdentityUpdatesLocked(selector api.FQDNSelector) (identities []identity.NumericIdentity) {
-	ids, ok := d.selectors[selector]
-	if !ok {
+//
+// It doesn't implement the identity allocation semantics of the interface.
+func (d *DummyIdentityNotifier) RegisterForIdentityUpdatesLocked(selector api.FQDNSelector) {
+	if _, ok := d.selectors[selector]; !ok {
 		d.selectors[selector] = []identity.NumericIdentity{}
 	}
-	return ids
 }
 
 // UnregisterForIdentityUpdatesLocked stops managing this selector.
@@ -57,12 +59,8 @@ func (d *DummyIdentityNotifier) UnregisterForIdentityUpdatesLocked(selector api.
 	delete(d.selectors, selector)
 }
 
-func (d *DummyIdentityNotifier) InjectIdentitiesForSelector(fqdnSel api.FQDNSelector, ids []identity.NumericIdentity) {
-	d.selectors[fqdnSel] = ids
-}
-
-// IsRegistered returns whether this selector is being managed.
-func (d *DummyIdentityNotifier) IsRegistered(selector api.FQDNSelector) bool {
-	_, ok := d.selectors[selector]
-	return ok
+// MapSelectorsToIPsLocked is a dummy implementation that does not implement
+// the selectors of the real implementation.
+func (d *DummyIdentityNotifier) MapSelectorsToIPsLocked(fqdnSelectors map[api.FQDNSelector]struct{}) (selectorsMissingIPs []api.FQDNSelector, selectorIPMapping map[api.FQDNSelector][]net.IP) {
+	return nil, nil
 }

@@ -1158,7 +1158,7 @@ func (e *Endpoint) leaveLocked(proxyWaitGroup *completion.WaitGroup, conf Delete
 		releaseCtx, cancel := context.WithTimeout(context.Background(), option.Config.KVstoreConnectivityTimeout)
 		defer cancel()
 
-		_, err := e.allocator.Release(releaseCtx, e.SecurityIdentity)
+		_, err := e.allocator.Release(releaseCtx, e.SecurityIdentity, false)
 		if err != nil {
 			errors = append(errors, fmt.Errorf("unable to release identity: %s", err))
 		}
@@ -1862,7 +1862,16 @@ func (e *Endpoint) identityLabelsChanged(ctx context.Context, myChangeRev int) (
 	allocateCtx, cancel := context.WithTimeout(ctx, option.Config.KVstoreConnectivityTimeout)
 	defer cancel()
 
-	allocatedIdentity, _, err := e.allocator.AllocateIdentity(allocateCtx, newLabels, true)
+	// Typically, SelectorCache notification happens from the identityWatcher,
+	// requiring a round-trip to the kvstore to start updating policies for
+	// other endpoints on the node.
+	//
+	// To get a jump start on plumbing the handling of the identity for
+	// this endpoint, trigger the early notification via this call. If the
+	// identity is new, then this will start updating the policy for other
+	// co-located endpoints without having to wait for that RTT.
+	notifySelectorCache := true
+	allocatedIdentity, _, err := e.allocator.AllocateIdentity(allocateCtx, newLabels, notifySelectorCache)
 	if err != nil {
 		err = fmt.Errorf("unable to resolve identity: %s", err)
 		e.LogStatus(Other, Warning, fmt.Sprintf("%s (will retry)", err.Error()))
@@ -1878,7 +1887,7 @@ func (e *Endpoint) identityLabelsChanged(ctx context.Context, myChangeRev int) (
 	defer cancel()
 
 	releaseNewlyAllocatedIdentity := func() {
-		_, err := e.allocator.Release(releaseCtx, allocatedIdentity)
+		_, err := e.allocator.Release(releaseCtx, allocatedIdentity, false)
 		if err != nil {
 			// non fatal error as keys will expire after lease expires but log it
 			elog.WithFields(logrus.Fields{logfields.Identity: allocatedIdentity.ID}).
@@ -1938,7 +1947,7 @@ func (e *Endpoint) identityLabelsChanged(ctx context.Context, myChangeRev int) (
 	e.SetIdentity(allocatedIdentity, false)
 
 	if oldIdentity != nil {
-		_, err := e.allocator.Release(releaseCtx, oldIdentity)
+		_, err := e.allocator.Release(releaseCtx, oldIdentity, false)
 		if err != nil {
 			elog.WithFields(logrus.Fields{logfields.Identity: oldIdentity.ID}).
 				WithError(err).Warn("Unable to release old endpoint identity")

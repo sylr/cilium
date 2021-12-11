@@ -128,6 +128,12 @@ you can delete the cilium-preflight and proceed with the upgrade.
 Upgrading Cilium
 ================
 
+During normal cluster operations, all Cilium components should run the same
+version. Upgrading just one of them (e.g., upgrading the agent without
+upgrading the operator) could result in unexpected cluster behavior.
+The following steps will describe how to upgrade all of the components from
+one stable release to a later stable release.
+
 .. include:: upgrade-warning.rst
 
 Step 1: Upgrade to latest micro version (Recommended)
@@ -307,6 +313,19 @@ Annotations:
 
 .. _1.10_upgrade_notes:
 
+1.10.6 Upgrade Notes
+--------------------
+
+* The XDP-based prefilter is enabled for all devices specified by ``--devices``
+  if ``--prefilter-device`` is set.
+
+Deprecated Options
+~~~~~~~~~~~~~~~~~~
+
+* ``prefilter-device`` and ``prefilter-mode``: These options have been
+  deprecated in favor of ``enable-xdp-prefilter`` and ``bpf-lb-acceleration``,
+  and will be removed in 1.12.
+
 1.10 Upgrade Notes
 ------------------
 
@@ -337,6 +356,9 @@ Annotations:
 * The default setting for ``kubeProxyReplacement`` has been changed from
   ``probe`` to ``disabled``. For any new installation, if you want to use
   kube-proxy replacement, set  ``kubeProxyReplacement`` to ``strict``.
+* When Egress Gateway is enabled, upgrading to 1.10.6 will cause a brief
+  interruption of the connectivity between the client pods and the egress
+  gateway nodes.
 
 Removed Metrics/Labels
 ~~~~~~~~~~~~~~~~~~~~~~

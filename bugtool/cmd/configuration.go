@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -173,7 +174,7 @@ func defaultCommands(confDir string, cmdDir string, k8sPods []string) []string {
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_ep_to_policy", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_throttle", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_encrypt_state", bpffsMountpoint),
-			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_egress_v4", bpffsMountpoint),
+			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_egress_gw_policy_v4", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_lb4_services_v2", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_lb4_services", bpffsMountpoint),
 			fmt.Sprintf("bpftool map dump pinned %s/tc/globals/cilium_lb4_backends", bpffsMountpoint),
@@ -205,7 +206,7 @@ func defaultCommands(confDir string, cmdDir string, k8sPods []string) []string {
 	// separately below
 	commands = append(commands, catCommands()...)
 	commands = append(commands, routeCommands()...)
-	commands = append(commands, ethoolCommands()...)
+	commands = append(commands, ethtoolCommands()...)
 	commands = append(commands, copyConfigCommands(confDir, k8sPods)...)
 	commands = append(commands, copyCiliumInfoCommands(cmdDir, k8sPods)...)
 
@@ -272,9 +273,9 @@ func routeCommands() []string {
 	commands := []string{}
 	routes, _ := execCommand("ip route show table all | grep -E --only-matching 'table [0-9]+'")
 
-	for _, r := range strings.Split(strings.TrimSuffix(routes, "\n"), "\n") {
-		routeTablev4 := fmt.Sprintf("ip -4 route show %v", r)
-		routeTablev6 := fmt.Sprintf("ip -6 route show %v", r)
+	for _, r := range bytes.Split(bytes.TrimSuffix(routes, []byte("\n")), []byte("\n")) {
+		routeTablev4 := fmt.Sprintf("ip -4 route show %s", r)
+		routeTablev6 := fmt.Sprintf("ip -6 route show %s", r)
 		commands = append(commands, routeTablev4, routeTablev6)
 	}
 	return commands
@@ -301,7 +302,7 @@ func copyConfigCommands(confDir string, k8sPods []string) []string {
 	// path. This should be refactored.
 	if len(k8sPods) == 0 {
 		kernel, _ := execCommand("uname -r")
-		kernel = strings.TrimSpace(kernel)
+		kernel = bytes.TrimSpace(kernel)
 		// Append the boot config for the current kernel
 		l := Location{fmt.Sprintf("/boot/config-%s", kernel),
 			fmt.Sprintf("%s/kernel-config-%s", confDir, kernel)}
@@ -320,7 +321,7 @@ func copyConfigCommands(confDir string, k8sPods []string) []string {
 		for _, pod := range k8sPods {
 			prompt := podPrefix(pod, "uname -r")
 			kernel, _ := execCommand(prompt)
-			kernel = strings.TrimSpace(kernel)
+			kernel = bytes.TrimSpace(kernel)
 			l := Location{fmt.Sprintf("/boot/config-%s", kernel),
 				fmt.Sprintf("%s/kernel-config-%s", confDir, kernel)}
 			locations = append(locations, l)

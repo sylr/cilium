@@ -35,12 +35,13 @@ import (
 	"github.com/cilium/cilium/pkg/counter"
 	"github.com/cilium/cilium/pkg/crypto/certificatemanager"
 	"github.com/cilium/cilium/pkg/datapath"
+	"github.com/cilium/cilium/pkg/datapath/linux/probes"
 	linuxrouting "github.com/cilium/cilium/pkg/datapath/linux/routing"
 	"github.com/cilium/cilium/pkg/datapath/loader"
 	datapathOption "github.com/cilium/cilium/pkg/datapath/option"
 	"github.com/cilium/cilium/pkg/debug"
 	"github.com/cilium/cilium/pkg/defaults"
-	"github.com/cilium/cilium/pkg/egresspolicy"
+	"github.com/cilium/cilium/pkg/egressgateway"
 	"github.com/cilium/cilium/pkg/endpoint"
 	"github.com/cilium/cilium/pkg/endpoint/regeneration"
 	"github.com/cilium/cilium/pkg/endpointmanager"
@@ -49,7 +50,6 @@ import (
 	"github.com/cilium/cilium/pkg/fqdn"
 	"github.com/cilium/cilium/pkg/hubble/observer"
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/cilium/pkg/identity/cache"
 	"github.com/cilium/cilium/pkg/identity/identitymanager"
 	"github.com/cilium/cilium/pkg/ipam"
 	ipamOption "github.com/cilium/cilium/pkg/ipam/option"
@@ -92,6 +92,7 @@ import (
 	cnitypes "github.com/cilium/cilium/plugins/cilium-cni/types"
 
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -156,7 +157,7 @@ type Daemon struct {
 
 	endpointManager *endpointmanager.EndpointManager
 
-	identityAllocator *cache.CachingIdentityAllocator
+	identityAllocator CachingIdentityAllocator
 
 	k8sWatcher *watchers.K8sWatcher
 
@@ -178,7 +179,7 @@ type Daemon struct {
 
 	bgpSpeaker *speaker.Speaker
 
-	egressPolicyManager *egresspolicy.Manager
+	egressGatewayManager *egressgateway.Manager
 
 	apiLimiterSet *rate.APILimiterSet
 
@@ -285,7 +286,50 @@ func restoreCiliumHostIPs(ipv6 bool, fromK8s net.IP) {
 		fromFS = node.GetInternalIPv4Router()
 	}
 
-	node.RestoreHostIPs(ipv6, fromK8s, fromFS, cidr)
+	restoredIP := node.RestoreHostIPs(ipv6, fromK8s, fromFS, cidr)
+	if err := removeOldRouterState(restoredIP); err != nil {
+		log.WithError(err).Warnf(
+			"Failed to remove old router IPs (restored IP: %s) from cilium_host. Manual intervention is required to remove all other old IPs.",
+			restoredIP,
+		)
+	}
+}
+
+// removeOldRouterState will try to ensure that the only IP assigned to the
+// `cilium_host` interface is the given restored IP. If the given IP is nil,
+// then it attempts to clear all IPs from the interface.
+func removeOldRouterState(restoredIP net.IP) error {
+	l, err := netlink.LinkByName(defaults.HostDevice)
+	if err != nil {
+		return err
+	}
+
+	family := netlink.FAMILY_V6
+	if restoredIP.To4() != nil {
+		family = netlink.FAMILY_V4
+	}
+	addrs, err := netlink.AddrList(l, family)
+	if err != nil {
+		return err
+	}
+	if len(addrs) > 1 {
+		log.Info("More than one router IP was found on the cilium_host device after restoration, cleaning up old router IPs.")
+	}
+
+	var errs []error
+	for _, a := range addrs {
+		if restoredIP != nil && restoredIP.Equal(a.IP) {
+			continue
+		}
+		if err := netlink.AddrDel(l, &a); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove IP %s: %w", a.IP, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to remove all old router IPs: %v", errs)
+	}
+
+	return nil
 }
 
 // NewDaemon creates and returns a new Daemon with the parameters set in c.
@@ -364,7 +408,7 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 	mtuConfig = mtu.NewConfiguration(
 		authKeySize,
 		option.Config.EnableIPSec,
-		option.Config.Tunnel != option.TunnelDisabled,
+		option.Config.TunnelingEnabled(),
 		option.Config.EnableWireguard,
 		configuredMTU,
 		externalIP,
@@ -400,6 +444,10 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		apiLimiterSet:     apiLimiterSet,
 	}
 
+	if option.Config.RunMonitorAgent {
+		d.monitorAgent = monitoragent.NewAgent(ctx)
+	}
+
 	d.configModifyQueue = eventqueue.NewEventQueueBuffered("config-modify-queue", ConfigModifyQueueSize)
 	d.configModifyQueue.Run()
 
@@ -411,8 +459,9 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		return nil, nil, err
 	}
 
-	d.identityAllocator = cache.NewCachingIdentityAllocator(&d)
-	d.policy = policy.NewPolicyRepository(d.identityAllocator.GetIdentityCache(),
+	d.identityAllocator = NewCachingIdentityAllocator(&d)
+	d.policy = policy.NewPolicyRepository(d.identityAllocator,
+		d.identityAllocator.GetIdentityCache(),
 		certificatemanager.NewManager(option.Config.CertDirectory, k8s.Client()))
 	d.policy.SetEnvoyRulesFunc(envoy.GetEnvoyHTTPRules)
 
@@ -432,7 +481,9 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		d.bgpSpeaker = speaker.New()
 	}
 
-	d.egressPolicyManager = egresspolicy.NewEgressPolicyManager()
+	if option.Config.EnableEgressGateway {
+		d.egressGatewayManager = egressgateway.NewEgressGatewayManager(&d)
+	}
 
 	d.k8sWatcher = watchers.NewK8sWatcher(
 		d.endpointManager,
@@ -443,7 +494,7 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		d.datapath,
 		d.redirectPolicyManager,
 		d.bgpSpeaker,
-		d.egressPolicyManager,
+		d.egressGatewayManager,
 		option.Config,
 	)
 	nd.RegisterK8sNodeGetter(d.k8sWatcher)
@@ -627,7 +678,7 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 	// happen after invoking initKubeProxyReplacementOptions().
 	if option.Config.EnableIPv4Masquerade && option.Config.EnableBPFMasquerade &&
 		(!option.Config.EnableNodePort || option.Config.EgressMasqueradeInterfaces != "" || !option.Config.EnableRemoteNodeIdentity ||
-			(option.Config.Tunnel != option.TunnelDisabled && !hasFullHostReachableServices())) {
+			(option.Config.TunnelingEnabled() && !hasFullHostReachableServices())) {
 
 		var msg string
 		switch {
@@ -638,7 +689,7 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 			msg = fmt.Sprintf("BPF masquerade requires remote node identities (--%s=\"true\").",
 				option.EnableRemoteNodeIdentity)
 		// Remove the check after https://github.com/cilium/cilium/issues/12544 is fixed
-		case option.Config.Tunnel != option.TunnelDisabled && !hasFullHostReachableServices():
+		case option.Config.TunnelingEnabled() && !hasFullHostReachableServices():
 			msg = fmt.Sprintf("BPF masquerade requires --%s to be fully enabled (TCP and UDP).",
 				option.EnableHostReachableServices)
 		case option.Config.EgressMasqueradeInterfaces != "":
@@ -655,6 +706,18 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 			option.Config.EnableHostLegacyRouting = true
 			log.Infof("BPF masquerade could not be enabled. Falling back to legacy host routing (--%s=\"true\").",
 				option.EnableHostLegacyRouting)
+		}
+	}
+	if option.Config.EnableEgressGateway {
+		if !probes.NewProbeManager().GetMisc().HaveLargeInsnLimit {
+			return nil, nil, fmt.Errorf("egress gateway needs kernel 5.2 or newer")
+		}
+
+		// datapath code depends on remote node identities to distinguish between cluser-local and
+		// cluster-egress traffic
+		if !option.Config.EnableRemoteNodeIdentity {
+			return nil, nil, fmt.Errorf("egress gateway requires remote node identities (--%s=\"true\").",
+				option.EnableRemoteNodeIdentity)
 		}
 	}
 	if option.Config.EnableIPv4Masquerade && option.Config.EnableBPFMasquerade {
@@ -813,7 +876,8 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		// well known identities have already been initialized above.
 		// Ignore the channel returned by this function, as we want the global
 		// identity allocator to run asynchronously.
-		d.identityAllocator.InitIdentityAllocator(k8s.CiliumClient(), nil)
+		realIdentityAllocator := d.identityAllocator
+		realIdentityAllocator.InitIdentityAllocator(k8s.CiliumClient(), nil)
 
 		d.bootstrapClusterMesh(nodeMngr)
 	}
@@ -834,16 +898,15 @@ func NewDaemon(ctx context.Context, cancel context.CancelFunc, epMgr *endpointma
 		return nil, restoredEndpoints, err
 	}
 
-	// We can only start monitor agent once cilium_event has been set up.
+	// We can only attach the monitor agent once cilium_event has been set up.
 	if option.Config.RunMonitorAgent {
-		monitorAgent, err := monitoragent.NewAgent(d.ctx, defaults.MonitorBufferPages)
+		err = d.monitorAgent.AttachToEventsMap(defaults.MonitorBufferPages)
 		if err != nil {
 			return nil, nil, err
 		}
-		d.monitorAgent = monitorAgent
 
 		if option.Config.EnableMonitor {
-			err = monitoragent.ServeMonitorAPI(monitorAgent)
+			err = monitoragent.ServeMonitorAPI(d.monitorAgent)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1023,4 +1086,21 @@ func (d *Daemon) GetNodeSuffix() string {
 	}
 
 	return ip.String()
+}
+
+// K8sCacheIsSynced returns true if the agent has fully synced its k8s cache
+// with the API server
+func (d *Daemon) K8sCacheIsSynced() bool {
+	select {
+	case <-d.k8sCachesSynced:
+		return true
+	default:
+		return false
+	}
+}
+
+// WaitUntilK8sCacheIsSynced waits until the agent has fully synced its k8s cache with the API
+// server
+func (d *Daemon) WaitUntilK8sCacheIsSynced() {
+	_, _ = <-d.k8sCachesSynced
 }

@@ -155,8 +155,8 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 	cDefinesMap["IPCACHE_MAP"] = ipcachemap.Name
 	cDefinesMap["IPCACHE_MAP_SIZE"] = fmt.Sprintf("%d", ipcachemap.MaxEntries)
 	// TODO(anfernee): Update Documentation/concepts/ebpf/maps.rst when egress gateway support is merged.
-	cDefinesMap["EGRESS_MAP"] = egressmap.MapName
-	cDefinesMap["EGRESS_MAP_SIZE"] = fmt.Sprintf("%d", egressmap.MaxEntries)
+	cDefinesMap["EGRESS_POLICY_MAP"] = egressmap.PolicyMapName
+	cDefinesMap["EGRESS_POLICY_MAP_SIZE"] = fmt.Sprintf("%d", egressmap.MaxPolicyEntries)
 	cDefinesMap["POLICY_PROG_MAP_SIZE"] = fmt.Sprintf("%d", policymap.PolicyCallMaxEntries)
 	cDefinesMap["SOCKOPS_MAP_SIZE"] = fmt.Sprintf("%d", sockmap.MaxEntries)
 	cDefinesMap["ENCRYPT_MAP"] = encrypt.MapName
@@ -234,12 +234,16 @@ func (h *HeaderfileWriter) WriteNodeConfig(w io.Writer, cfg *datapath.LocalNodeC
 		cDefinesMap["ENCRYPT_NODE"] = "1"
 	}
 
-	if option.Config.DevicePreFilter != "undefined" {
+	if option.Config.EnableXDPPrefilter {
 		cDefinesMap["ENABLE_PREFILTER"] = "1"
 	}
 
 	if option.Config.EnableEgressGateway {
 		cDefinesMap["ENABLE_EGRESS_GATEWAY"] = "1"
+	}
+
+	if option.Config.EnableEndpointRoutes {
+		cDefinesMap["ENABLE_ENDPOINT_ROUTES"] = "1"
 	}
 
 	if option.Config.EnableHostReachableServices {
@@ -751,10 +755,6 @@ func (h *HeaderfileWriter) writeTemplateConfig(fw *bufio.Writer, e datapath.Endp
 
 	if e.RequireRouting() {
 		fmt.Fprintf(fw, "#define ENABLE_ROUTING 1\n")
-	}
-
-	if e.RequireEndpointRoute() {
-		fmt.Fprintf(fw, "#define ENABLE_ENDPOINT_ROUTES 1\n")
 	}
 
 	if !option.Config.EnableHostLegacyRouting && option.Config.DirectRoutingDevice != "" {

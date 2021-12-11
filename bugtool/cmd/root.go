@@ -15,6 +15,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/cilium/cilium/pkg/components"
 	"github.com/cilium/cilium/pkg/defaults"
 
+	"github.com/cilium/workerpool"
 	"github.com/spf13/cobra"
 )
 
@@ -64,21 +67,22 @@ for sensitive information.
 )
 
 var (
-	archive        bool
-	archiveType    string
-	k8s            bool
-	dumpPath       string
-	host           string
-	k8sNamespace   string
-	k8sLabel       string
-	execTimeout    time.Duration
-	configPath     string
-	dryRunMode     bool
-	enableMarkdown bool
-	archivePrefix  string
-	getPProf       bool
-	pprofPort      int
-	traceSeconds   int
+	archive         bool
+	archiveType     string
+	k8s             bool
+	dumpPath        string
+	host            string
+	k8sNamespace    string
+	k8sLabel        string
+	execTimeout     time.Duration
+	configPath      string
+	dryRunMode      bool
+	enableMarkdown  bool
+	archivePrefix   string
+	getPProf        bool
+	pprofPort       int
+	traceSeconds    int
+	parallelWorkers int
 )
 
 func init() {
@@ -97,6 +101,7 @@ func init() {
 	BugtoolRootCmd.Flags().StringVarP(&configPath, "config", "", "./.cilium-bugtool.config", "Configuration to decide what should be run")
 	BugtoolRootCmd.Flags().BoolVar(&enableMarkdown, "enable-markdown", false, "Dump output of commands in markdown format")
 	BugtoolRootCmd.Flags().StringVarP(&archivePrefix, "archive-prefix", "", "", "String to prefix to name of archive if created (e.g., with cilium pod-name)")
+	BugtoolRootCmd.Flags().IntVar(&parallelWorkers, "parallel-workers", 0, "Maximum number of parallel worker tasks, use 0 for number of CPUs")
 }
 
 func getVerifyCiliumPods() (k8sPods []string) {
@@ -289,24 +294,15 @@ func podPrefix(pod, cmd string) string {
 }
 
 func runAll(commands []string, cmdDir string, k8sPods []string) {
-	var numRoutinesAtOnce int
-	// Perform sanity check to prevent division by zero
-	if l := len(commands); l > 1 {
-		numRoutinesAtOnce = l / 2
-	} else if l == 1 {
-		numRoutinesAtOnce = l
-	} else {
-		// No commands
+	if len(commands) == 0 {
 		return
 	}
-	semaphore := make(chan bool, numRoutinesAtOnce)
-	for i := 0; i < numRoutinesAtOnce; i++ {
-		// This will not block because the channel is buffered and we
-		// can write to it numRoutinesAtOnce before the write blocks
-		semaphore <- true
+
+	if parallelWorkers <= 0 {
+		parallelWorkers = runtime.NumCPU()
 	}
 
-	wg := sync.WaitGroup{}
+	wp := workerpool.New(parallelWorkers)
 	for _, cmd := range commands {
 		if strings.Contains(cmd, "tables") {
 			// iptables commands hold locks so we can't have multiple runs. They
@@ -315,22 +311,9 @@ func runAll(commands []string, cmdDir string, k8sPods []string) {
 			writeCmdToFile(cmdDir, cmd, k8sPods, enableMarkdown, nil)
 			continue
 		}
-		// Tell the wait group it needs to track another goroutine
-		wg.Add(1)
 
-		// Start a subroutine to run our command
-		go func(cmd string) {
-			// Once we exit this goroutine completely, signal the
-			// original that we are done
-			defer wg.Done()
-
-			// This will wait until an entry in this channel is
-			// available to read. We started with numRoutinesAtOnce
-			// in there (from above)
-			<-semaphore
-			// When we are done we return the thing we took from
-			// the semaphore, so another goroutine can get it
-			defer func() { semaphore <- true }()
+		cmd := cmd // https://golang.org/doc/faq#closures_and_goroutines
+		err := wp.Submit(cmd, func(_ context.Context) error {
 			if strings.Contains(cmd, "xfrm state") {
 				//  Output of 'ip -s xfrm state' needs additional processing to replace
 				// raw keys by their hash.
@@ -338,24 +321,38 @@ func runAll(commands []string, cmdDir string, k8sPods []string) {
 			} else {
 				writeCmdToFile(cmdDir, cmd, k8sPods, enableMarkdown, nil)
 			}
-		}(cmd)
+			return nil
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to submit task for command %q: %v\n", cmd, err)
+			return
+		}
 	}
-	// Wait for all the spawned goroutines to finish up.
-	wg.Wait()
+
+	// wait for all submitted tasks to complete
+	_, err := wp.Drain()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error waiting for commands to complete: %v\n", err)
+	}
+
+	err = wp.Close()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to close worker pool: %v\n", err)
+	}
 }
 
-func execCommand(prompt string) (string, error) {
+func execCommand(prompt string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), execTimeout)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, "bash", "-c", prompt).CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return "", fmt.Errorf("exec timeout")
+		return nil, fmt.Errorf("exec timeout")
 	}
-	return string(output), err
+	return output, err
 }
 
 // writeCmdToFile will execute command and write markdown output to a file
-func writeCmdToFile(cmdDir, prompt string, k8sPods []string, enableMarkdown bool, postProcess func(output string) string) {
+func writeCmdToFile(cmdDir, prompt string, k8sPods []string, enableMarkdown bool, postProcess func(output []byte) []byte) {
 	// Clean up the filename
 	name := strings.Replace(prompt, "/", " ", -1)
 	name = strings.Replace(name, " ", "-", -1)
@@ -386,26 +383,36 @@ func writeCmdToFile(cmdDir, prompt string, k8sPods []string, enableMarkdown bool
 			return
 		}
 	}
-	// Write prompt as header and the output as body, and / or error but delete empty output.
-	output, err := execCommand(prompt)
-	// Post-process the output if necessary
-	if postProcess != nil {
-		output = postProcess(output)
+
+	var output []byte
+
+	// If we don't need to postprocess the command output, write the output to a file directly
+	// without buffering.
+	if !enableMarkdown && postProcess == nil {
+		cmd := exec.Command("bash", "-c", prompt)
+		cmd.Stdout = f
+		cmd.Stderr = f
+		err = cmd.Run()
+	} else {
+		output, err = execCommand(prompt)
+		// Post-process the output if necessary
+		if postProcess != nil {
+			output = postProcess(output)
+		}
+
+		// We deliberately continue in case there was a error but the output
+		// produced might have useful information
+		if bytes.Contains(output, []byte("```")) || !enableMarkdown {
+			// Already contains Markdown, print as is.
+			fmt.Fprint(f, string(output))
+		} else if enableMarkdown && len(output) > 0 {
+			// Write prompt as header and the output as body, and/or error but delete empty output.
+			fmt.Fprint(f, fmt.Sprintf("# %s\n\n```\n%s\n```\n", prompt, output))
+		}
 	}
 
 	if err != nil {
 		fmt.Fprintf(f, "> Error while running '%s':  %s\n\n", prompt, err)
-	}
-	// We deliberately continue in case there was a error but the output
-	// produced might have useful information
-	if strings.Contains(output, "```") || !enableMarkdown {
-		// Already contains Markdown, print as is.
-		fmt.Fprint(f, output)
-	} else if enableMarkdown && len(output) > 0 {
-		fmt.Fprint(f, fmt.Sprintf("# %s\n\n```\n%s\n```\n", prompt, output))
-	} else {
-		// Empty file
-		os.Remove(f.Name())
 	}
 }
 
@@ -430,17 +437,17 @@ func getCiliumPods(namespace, label string) ([]string, error) {
 		return nil, err
 	}
 
-	lines := strings.Split(output, "\n")
+	lines := bytes.Split(output, []byte("\n"))
 	ciliumPods := make([]string, 0, len(lines))
 	for _, l := range lines {
-		if !strings.HasPrefix(l, "cilium") {
+		if !bytes.HasPrefix(l, []byte("cilium")) {
 			continue
 		}
 		// NAME           READY     STATUS    RESTARTS   AGE
 		// cilium-cfmww   0/1       Running   0          3m
 		// ^
-		pod := strings.Split(l, " ")[0]
-		ciliumPods = append(ciliumPods, pod)
+		pod := bytes.Split(l, []byte(" "))[0]
+		ciliumPods = append(ciliumPods, string(pod))
 	}
 
 	return ciliumPods, nil

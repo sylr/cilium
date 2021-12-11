@@ -245,11 +245,6 @@ struct endpoint_info {
 	__u32		pad[4];
 };
 
-struct egress_info {
-	__u32 egress_ip;
-	__u32 tunnel_endpoint;
-};
-
 struct edt_id {
 	__u64		id;
 };
@@ -297,6 +292,17 @@ struct metrics_key {
 struct metrics_value {
 	__u64	count;
 	__u64	bytes;
+};
+
+struct egress_gw_policy_key {
+	struct bpf_lpm_trie_key lpm_key;
+	__u32 saddr;
+	__u32 daddr;
+};
+
+struct egress_gw_policy_entry {
+	__u32 egress_ip;
+	__u32 gateway_ip;
 };
 
 enum {
@@ -902,7 +908,16 @@ static __always_inline int redirect_ep(struct __ctx_buff *ctx __maybe_unused,
 		 */
 		ctx_change_type(ctx, PACKET_HOST);
 # endif /* ENCAP_IFINDEX */
+#if __ctx_is == __ctx_skb
 		return redirect_peer(ifindex, 0);
+#else
+		/* bpf_redirect_peer() is available only in TC BPF. However,
+		 * this path is not used by bpf_xdp. So to avoid compilation
+		 * errors protect it with #if until we have replaced all usage
+		 * of redirect{,_peer}() with ctx_redirect{,_peer}().
+		 */
+		return -ENOTSUP;
+#endif /* __ctx_is == __ctx_skb */
 	}
 #else
 	return CTX_ACT_OK;

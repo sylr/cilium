@@ -34,6 +34,7 @@
 #include "lib/dbg.h"
 #include "lib/trace.h"
 #include "lib/csum.h"
+#include "lib/egress_policies.h"
 #include "lib/encap.h"
 #include "lib/eps.h"
 #include "lib/nat.h"
@@ -483,8 +484,8 @@ static __always_inline int handle_ipv6(struct __ctx_buff *ctx, __u32 *dstID)
 	return ipv6_l3_from_lxc(ctx, &tuple, ETH_HLEN, ip6, dstID);
 }
 
-declare_tailcall_if(__or(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
-			 is_defined(DEBUG)), CILIUM_CALL_IPV6_FROM_LXC)
+declare_tailcall_if(__or3(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6),
+			  is_defined(DEBUG)), CILIUM_CALL_IPV6_FROM_LXC)
 int tail_handle_ipv6(struct __ctx_buff *ctx)
 {
 	__u32 dstID = 0;
@@ -525,7 +526,7 @@ static __always_inline int handle_ipv4_from_lxc(struct __ctx_buff *ctx,
 	__u32 tunnel_endpoint = 0;
 	__u8 encrypt_key = 0;
 	__u32 monitor = 0;
-	__u8 reason;
+	__u8 ct_ret;
 	bool hairpin_flow = false; /* endpoint wants to access itself via service IP */
 	__u8 policy_match_type = POLICY_MATCH_NONE;
 	__u8 audited = 0;
@@ -600,15 +601,13 @@ skip_service_lookup:
 	 * POLICY_SKIP if the packet is a reply packet to an existing incoming
 	 * connection.
 	 */
-	ret = ct_lookup4(get_ct_map4(&tuple), &tuple, ctx, l4_off, CT_EGRESS,
-			 &ct_state, &monitor);
-	if (ret < 0)
-		return ret;
-
-	reason = ret;
+	ct_ret = ct_lookup4(get_ct_map4(&tuple), &tuple, ctx, l4_off, CT_EGRESS,
+			    &ct_state, &monitor);
+	if (ct_ret < 0)
+		return ct_ret;
 
 	/* Check it this is return traffic to an ingress proxy. */
-	if ((ret == CT_REPLY || ret == CT_RELATED) && ct_state.proxy_redirect) {
+	if ((ct_ret == CT_REPLY || ct_ret == CT_RELATED) && ct_state.proxy_redirect) {
 		/* Stack will do a socket match and deliver locally. */
 		return ctx_redirect_to_proxy4(ctx, &tuple, 0, false);
 	}
@@ -658,7 +657,7 @@ skip_service_lookup:
 	verdict = policy_can_egress4(ctx, &tuple, SECLABEL, *dstID,
 				     &policy_match_type, &audited);
 
-	if (ret != CT_REPLY && ret != CT_RELATED && verdict < 0) {
+	if (ct_ret != CT_REPLY && ct_ret != CT_RELATED && verdict < 0) {
 		send_policy_verdict_notify(ctx, *dstID, tuple.dport,
 					   tuple.nexthdr, POLICY_EGRESS, 0,
 					   verdict, policy_match_type, audited);
@@ -666,7 +665,7 @@ skip_service_lookup:
 	}
 
 skip_policy_enforcement:
-	switch (ret) {
+	switch (ct_ret) {
 	case CT_NEW:
 		if (!hairpin_flow)
 			send_policy_verdict_notify(ctx, *dstID, tuple.dport,
@@ -736,10 +735,10 @@ ct_recreate4:
 
 	hairpin_flow |= ct_state.loopback;
 
-	if (redirect_to_proxy(verdict, reason)) {
+	if (redirect_to_proxy(verdict, ct_ret)) {
 		/* Trace the packet before it is forwarded to proxy */
 		send_trace_notify(ctx, TRACE_TO_PROXY, SECLABEL, 0,
-				  0, 0, reason, monitor);
+				  0, 0, ct_ret, monitor);
 		return ctx_redirect_to_proxy4(ctx, &tuple, verdict, false);
 	}
 
@@ -794,11 +793,22 @@ ct_recreate4:
 
 #ifdef ENABLE_EGRESS_GATEWAY
 	{
-		struct egress_info *info;
+		struct egress_gw_policy_entry *egress_gw_policy;
 		struct endpoint_key key = {};
 
-		info = lookup_ip4_egress_endpoint(ip4->saddr, ip4->daddr);
-		if (!info)
+		if (is_cluster_destination(ip4, *dstID, tunnel_endpoint))
+			goto skip_egress_gateway;
+
+		/* If the packet is a reply or is related, it means that outside
+		 * has initiated the connection, and so we should skip egress
+		 * gateway, since an egress policy is only matching connections
+		 * originating from a pod.
+		 */
+		if (ct_ret == CT_REPLY || ct_ret == CT_RELATED)
+			goto skip_egress_gateway;
+
+		egress_gw_policy = lookup_ip4_egress_gw_policy(ip4->saddr, ip4->daddr);
+		if (!egress_gw_policy)
 			goto skip_egress_gateway;
 
 		/* Encap and redirect the packet to egress gateway node through a tunnel.
@@ -806,7 +816,7 @@ ct_recreate4:
 		 * path to be consistent. In future, it can be optimized by directly
 		 * direct to external interface.
 		 */
-		ret = encap_and_redirect_lxc(ctx, info->tunnel_endpoint, encrypt_key,
+		ret = encap_and_redirect_lxc(ctx, egress_gw_policy->gateway_ip, encrypt_key,
 					     &key, SECLABEL, monitor);
 		if (ret == IPSEC_ENDPOINT)
 			goto encrypt_to_stack;
@@ -854,7 +864,7 @@ skip_egress_gateway:
 to_host:
 	if (is_defined(ENABLE_HOST_FIREWALL) && *dstID == HOST_ID) {
 		send_trace_notify(ctx, TRACE_TO_HOST, SECLABEL, HOST_ID, 0,
-				  HOST_IFINDEX, reason, monitor);
+				  HOST_IFINDEX, ct_ret, monitor);
 		return redirect(HOST_IFINDEX, BPF_F_INGRESS);
 	}
 #endif
@@ -896,13 +906,13 @@ pass_to_stack:
 encrypt_to_stack:
 #endif
 	send_trace_notify(ctx, TRACE_TO_STACK, SECLABEL, *dstID, 0, 0,
-			  reason, monitor);
+			  ct_ret, monitor);
 	cilium_dbg_capture(ctx, DBG_CAPTURE_DELIVERY, 0);
 	return CTX_ACT_OK;
 }
 
-declare_tailcall_if(__or(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
-			 is_defined(DEBUG)), CILIUM_CALL_IPV4_FROM_LXC)
+declare_tailcall_if(__or3(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6),
+			  is_defined(DEBUG)), CILIUM_CALL_IPV4_FROM_LXC)
 int tail_handle_ipv4(struct __ctx_buff *ctx)
 {
 	__u32 dstID = 0;
@@ -982,16 +992,16 @@ int handle_xgress(struct __ctx_buff *ctx)
 #ifdef ENABLE_IPV6
 	case bpf_htons(ETH_P_IPV6):
 		edt_set_aggregate(ctx, LXC_ID);
-		invoke_tailcall_if(__or(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
-					is_defined(DEBUG)),
+		invoke_tailcall_if(__or3(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6),
+					 is_defined(DEBUG)),
 				   CILIUM_CALL_IPV6_FROM_LXC, tail_handle_ipv6);
 		break;
 #endif /* ENABLE_IPV6 */
 #ifdef ENABLE_IPV4
 	case bpf_htons(ETH_P_IP):
 		edt_set_aggregate(ctx, LXC_ID);
-		invoke_tailcall_if(__or(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
-					is_defined(DEBUG)),
+		invoke_tailcall_if(__or3(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6),
+					 is_defined(DEBUG)),
 				   CILIUM_CALL_IPV4_FROM_LXC, tail_handle_ipv4);
 		break;
 #ifdef ENABLE_ARP_PASSTHROUGH
@@ -1207,7 +1217,7 @@ int tail_ipv6_policy(struct __ctx_buff *ctx)
 	return ret;
 }
 
-declare_tailcall_if(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
+declare_tailcall_if(__or(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
 		    CILIUM_CALL_IPV6_TO_ENDPOINT)
 int tail_ipv6_to_endpoint(struct __ctx_buff *ctx)
 {
@@ -1516,7 +1526,7 @@ int tail_ipv4_policy(struct __ctx_buff *ctx)
 	return ret;
 }
 
-declare_tailcall_if(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
+declare_tailcall_if(__or(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
 		    CILIUM_CALL_IPV4_TO_ENDPOINT)
 int tail_ipv4_to_endpoint(struct __ctx_buff *ctx)
 {
@@ -1749,13 +1759,13 @@ int handle_to_container(struct __ctx_buff *ctx)
 #endif
 #ifdef ENABLE_IPV6
 	case bpf_htons(ETH_P_IPV6):
-		invoke_tailcall_if(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
+		invoke_tailcall_if(__or(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
 				   CILIUM_CALL_IPV6_TO_ENDPOINT, tail_ipv6_to_endpoint);
 		break;
 #endif /* ENABLE_IPV6 */
 #ifdef ENABLE_IPV4
 	case bpf_htons(ETH_P_IP):
-		invoke_tailcall_if(__and(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
+		invoke_tailcall_if(__or(is_defined(ENABLE_IPV4), is_defined(ENABLE_IPV6)),
 				   CILIUM_CALL_IPV4_TO_ENDPOINT, tail_ipv4_to_endpoint);
 		break;
 #endif /* ENABLE_IPV4 */

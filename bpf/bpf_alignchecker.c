@@ -6,6 +6,7 @@
 #define TRACE_NOTIFY
 #define DROP_NOTIFY
 #define POLICY_VERDICT_NOTIFY
+#define ENABLE_EGRESS_GATEWAY
 #undef ENABLE_ARP_RESPONDER
 
 #include <bpf/ctx/unspec.h>
@@ -84,8 +85,8 @@ int main(void)
 	DECLARE(struct, lb6_src_range_key, iter);
 	DECLARE(struct, edt_id, iter);
 	DECLARE(struct, edt_info, iter);
-	DECLARE(struct, egress_key, iter);
-	DECLARE(struct, egress_info, iter);
+	DECLARE(struct, egress_gw_policy_key, iter);
+	DECLARE(struct, egress_gw_policy_entry, iter);
 	DECLARE(struct, capture4_wcard, iter);
 	DECLARE(struct, capture6_wcard, iter);
 	DECLARE(struct, capture_rule, iter);

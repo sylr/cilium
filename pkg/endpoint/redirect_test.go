@@ -147,12 +147,12 @@ func (s *RedirectSuite) TestAddVisibilityRedirects(c *check.C) {
 	identity.InitWellKnownIdentities(&fakeConfig.Config{})
 	idAllocatorOwner := &DummyIdentityAllocatorOwner{}
 
-	mgr := cache.NewCachingIdentityAllocator(idAllocatorOwner)
+	mgr := NewCachingIdentityAllocator(idAllocatorOwner)
 	<-mgr.InitIdentityAllocator(nil, nil)
 	defer mgr.Close()
 
 	do := &DummyOwner{
-		repo: policy.NewPolicyRepository(nil, nil),
+		repo: policy.NewPolicyRepository(nil, nil, nil),
 	}
 	identitymanager.Subscribe(do.repo)
 

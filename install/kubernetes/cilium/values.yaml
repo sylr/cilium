@@ -82,7 +82,7 @@ rollOutCiliumPods: false
 # -- Agent container image.
 image:
   repository: quay.io/cilium/cilium
-  tag: v1.10.5
+  tag: v1.10.6
   pullPolicy: IfNotPresent
   # cilium-digest
   digest: ""
@@ -256,7 +256,7 @@ bpf:
   policyMapMax: 16384
 
   # -- Configure auto-sizing for all BPF maps based on available memory.
-  # ref: https://docs.cilium.io/en/v1.9/concepts/ebpf/maps/#ebpf-maps
+  # ref: https://docs.cilium.io/en/stable/concepts/ebpf/maps/#ebpf-maps
   #mapDynamicSizeRatio: 0.0025
 
   # -- Configure the level of aggregation for monitor notifications.
@@ -275,7 +275,7 @@ bpf:
   lbExternalClusterIP: false
 
   # -- Enable native IP masquerade support in eBPF
-  #masquerade: true
+  #masquerade: false
 
   # -- Configure whether direct routing mode should route traffic via
   # host stack (true) or directly and more efficiently out of BPF (false) if
@@ -585,6 +585,8 @@ hubble:
       # This requires the prometheus CRDs to be available.
       # ref: https://github.com/prometheus-operator/prometheus-operator/blob/master/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml)
       enabled: false
+      # -- Labels to add to ServiceMonitor hubble
+      labels: {}
 
   # -- Unix domain socket path to listen to when Hubble is enabled.
   socketPath: /var/run/cilium/hubble.sock
@@ -646,7 +648,7 @@ hubble:
     # -- Hubble-relay container image.
     image:
       repository: quay.io/cilium/hubble-relay
-      tag: v1.10.5
+      tag: v1.10.6
        # hubble-relay-digest
       digest: ""
       useDigest: false
@@ -733,7 +735,7 @@ hubble:
       # -- Hubble-ui backend image.
       image:
         repository: quay.io/cilium/hubble-ui-backend
-        tag: v0.7.9@sha256:632c938ef6ff30e3a080c59b734afb1fb7493689275443faa1435f7141aabe76
+        tag: v0.8.5@sha256:2bce50cf6c32719d072706f7ceccad654bfa907b2745a496da99610776fe31ed
         pullPolicy: IfNotPresent
       # [Example]
       # resources:
@@ -750,7 +752,7 @@ hubble:
       # -- Hubble-ui frontend image.
       image:
         repository: quay.io/cilium/hubble-ui
-        tag: v0.7.9@sha256:e0e461c680ccd083ac24fe4f9e19e675422485f04d8720635ec41f2ba9e5562c
+        tag: v0.8.5@sha256:4eaca1ec1741043cfba6066a165b3bf251590cf4ac66371c4f63fbed2224ebb4
         pullPolicy: IfNotPresent
       # [Example]
       # resources:
@@ -1038,6 +1040,8 @@ prometheus:
     # This requires the prometheus CRDs to be available (see https://github.com/prometheus-operator/prometheus-operator/blob/master/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml)
     #
     enabled: false
+    # -- Labels to add to ServiceMonitor cilium-agent
+    labels: {}
     # -- Specify the Kubernetes namespace where Prometheus expects to find
     # service monitors configured.
     # namespace: ""
@@ -1217,7 +1221,7 @@ operator:
   # -- cilium-operator image.
   image:
     repository: quay.io/cilium/operator
-    tag: v1.10.5
+    tag: v1.10.6
     # operator-generic-digest
     genericDigest: ""
     # operator-azure-digest
@@ -1346,6 +1350,8 @@ operator:
       # This requires the prometheus CRDs to be available (see https://github.com/prometheus-operator/prometheus-operator/blob/master/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml)
       ##
       enabled: false
+      # -- Labels to add to ServiceMonitor cilium-operator
+      labels: {}
 
   # -- Skip CRDs creation for cilium-operator
   skipCRDCreation: false
@@ -1441,7 +1447,7 @@ preflight:
   # -- Cilium pre-flight image.
   image:
     repository: quay.io/cilium/cilium
-    tag: v1.10.5
+    tag: v1.10.6
     # cilium-digest
     digest: ""
     useDigest: false
@@ -1553,7 +1559,7 @@ clustermesh:
     # -- Clustermesh API server image.
     image:
       repository: quay.io/cilium/clustermesh-apiserver
-      tag: v1.10.5
+      tag: v1.10.6
       # clustermesh-apiserver-digest
       digest: ""
       useDigest: false
